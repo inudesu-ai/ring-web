@@ -16,7 +16,10 @@ jobs:
           cache: npm
           cache-dependency-path: api/package-lock.json
       - working-directory: api
-        run: npm install
+        run: npm ci
+      - working-directory: api
+        run: npm test
+      - run: node --check public/app.js
       - working-directory: api
         run: |
           npm start &
@@ -30,10 +33,15 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: "3.11"
+      - run: python -m pip install -r ml/requirements.txt
       - run: >-
           python -m py_compile
           sdk/ring_sound.py
           sdk/examples/capture_imu_jsonl.py
           sdk/examples/hmm_gesture_monitor.py
+          ml/ringml/*.py
+          ml/*.py
+          ml/examples/*.py
       - run: python -m unittest discover -s sdk/tests -v
+      - run: python -m unittest discover -s ml/tests -v
       - run: python sdk/ring_sound.py --help

@@ -42,6 +42,72 @@ See [`sdk/INTEGRATION.md`](sdk/INTEGRATION.md) for the import manifest and
 migration notes, and [`sdk/ring_sound_use.md`](sdk/ring_sound_use.md) for the
 complete API guide.
 
+## Gesture models
+
+The [`ml/`](ml/) pipeline includes:
+
+- a left-to-right diagonal Gaussian HMM trained with Baum-Welch EM;
+- a small NumPy MLP trained with Adam, class balancing, dropout, and early
+  stopping;
+- session-aware train/validation splitting;
+- portable `.npz` model files;
+- live BLE inference and authenticated publishing to the Web dashboard.
+
+Train both baselines after collecting at least two sessions per class
+(8-10 sessions per class is the practical target):
+
+```bash
+python -m pip install -r ml/requirements.txt
+
+python ml/train_hmm.py \
+  --data "ml/data/*.jsonl" \
+  --output ml/models/gesture-hmm.npz
+
+python ml/train_mlp.py \
+  --data "ml/data/*.jsonl" \
+  --output ml/models/gesture-mlp.npz
+```
+
+Run real-time inference on the laptop or edge computer connected to the ring:
+
+```bash
+export RING_BRIDGE_TOKEN="same-token-as-the-API-server"
+
+python ml/realtime_infer.py \
+  --address YOUR_RING_ADDRESS \
+  --model ml/models/gesture-mlp.npz \
+  --publish-url https://api.inudesu.xyz/v1/gesture
+```
+
+Full training and collection instructions are in [`ml/README.md`](ml/README.md).
+
+## Live gesture API
+
+The local inference bridge publishes predictions to:
+
+```text
+POST /v1/gesture
+Authorization: Bearer $RING_BRIDGE_TOKEN
+```
+
+The server validates and broadcasts accepted predictions to browser viewers:
+
+```text
+GET /v1/gesture/latest
+WebSocket /ws
+```
+
+Create an API token on the EC2 instance:
+
+```bash
+cd /opt/ring-web/api
+printf 'RING_BRIDGE_TOKEN=%s\n' "$(openssl rand -hex 32)" > .env
+pm2 restart ring-api --update-env
+```
+
+Copy the same value into `RING_BRIDGE_TOKEN` on the local ring computer. Never
+put this producer token in frontend JavaScript.
+
 ## DNS
 
 Cloudflare records should point to the AWS EC2 public IPv4 address:
@@ -71,6 +137,8 @@ curl -fsSL https://raw.githubusercontent.com/inudesu-ai/ring-web/main/scripts/in
 ```
 
 This installs Nginx, Node.js, PM2, clones this repo, serves the static site, and starts the API.
+On the first run it also generates the gesture producer token in
+`/opt/ring-web/api/.env`.
 
 ## Manual deploy
 
@@ -101,6 +169,7 @@ sudo systemctl reload nginx
 curl http://inudesu.xyz/health
 curl http://api.inudesu.xyz/health
 curl http://api.inudesu.xyz/hello
+curl http://api.inudesu.xyz/v1/gesture/latest
 ```
 
 ## HTTPS
