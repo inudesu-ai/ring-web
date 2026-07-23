@@ -52,6 +52,7 @@ def main() -> None:
                     record = {
                         "schema": "ring-imu/v1",
                         "session_id": session_id,
+                        "subject_id": f"demo-subject-{session_index:02d}",
                         "label": label,
                         "sdk_version": "demo",
                         "sample_rate_hz": sample_rate,

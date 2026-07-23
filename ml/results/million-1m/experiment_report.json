@@ -1,0 +1,371 @@
+{
+  "schema": "ring-million-experiment/v1",
+  "records": 1000000,
+  "classes": [
+    "circle",
+    "double_tap",
+    "down",
+    "idle",
+    "left",
+    "right",
+    "rotate_back",
+    "rotate_front",
+    "up",
+    "wave"
+  ],
+  "sessions": 1000,
+  "split_method": "predefined",
+  "subject_leakage": false,
+  "subjects": {
+    "train": 70,
+    "validation": 15,
+    "test": 15
+  },
+  "windows": {
+    "all": 49000,
+    "train": 34300,
+    "validation": 7350,
+    "test": 7350,
+    "hmm_train_balanced": 7000,
+    "hmm_validation_balanced": 5000,
+    "hmm_test_balanced": 5000
+  },
+  "models": {
+    "mlp": {
+      "selected_candidate": {
+        "name": "compact-48",
+        "hidden_size": 48,
+        "dropout": 0.24,
+        "l2": 0.0008,
+        "noise_std": 0.01,
+        "learning_rate": 0.0012
+      },
+      "candidate_validation": [
+        {
+          "name": "compact-48",
+          "train": {
+            "accuracy": 0.8138192419825073,
+            "macro_f1": 0.8009972766255935
+          },
+          "validation": {
+            "accuracy": 0.804625850340136,
+            "macro_f1": 0.7966241770492948
+          },
+          "epochs": 39
+        },
+        {
+          "name": "regularized-64",
+          "train": {
+            "accuracy": 0.8293586005830904,
+            "macro_f1": 0.8281638791901191
+          },
+          "validation": {
+            "accuracy": 0.7955102040816326,
+            "macro_f1": 0.7914764404660535
+          },
+          "epochs": 33
+        },
+        {
+          "name": "capacity-96",
+          "train": {
+            "accuracy": 0.8297084548104956,
+            "macro_f1": 0.8263740528305427
+          },
+          "validation": {
+            "accuracy": 0.8002721088435374,
+            "macro_f1": 0.7950960472268724
+          },
+          "epochs": 22
+        }
+      ],
+      "train": {
+        "accuracy": 0.8138192419825073,
+        "macro_f1": 0.8009972766255935
+      },
+      "validation": {
+        "accuracy": 0.804625850340136,
+        "macro_f1": 0.7966241770492948
+      },
+      "test": {
+        "accuracy": 0.7903401360544218,
+        "macro_f1": 0.7809900992874695
+      },
+      "fit_diagnosis": {
+        "status": "balanced",
+        "underfit": false,
+        "overfit": false,
+        "domain_shift_sensitive": false,
+        "generalization_gap": 0.004373099576298722,
+        "validation_test_gap": 0.015634077761825238
+      },
+      "test_mean_confidence": 0.813418005333695,
+      "test_confusion": [
+        [
+          735,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0
+        ],
+        [
+          0,
+          727,
+          0,
+          8,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0
+        ],
+        [
+          0,
+          0,
+          348,
+          0,
+          0,
+          0,
+          0,
+          0,
+          387,
+          0
+        ],
+        [
+          0,
+          0,
+          0,
+          735,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0
+        ],
+        [
+          0,
+          0,
+          0,
+          0,
+          735,
+          0,
+          0,
+          0,
+          0,
+          0
+        ],
+        [
+          0,
+          0,
+          0,
+          0,
+          0,
+          735,
+          0,
+          0,
+          0,
+          0
+        ],
+        [
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          135,
+          600,
+          0,
+          0
+        ],
+        [
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          183,
+          552,
+          0,
+          0
+        ],
+        [
+          0,
+          0,
+          363,
+          0,
+          0,
+          0,
+          0,
+          0,
+          372,
+          0
+        ],
+        [
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          735
+        ]
+      ]
+    },
+    "hmm": {
+      "train": {
+        "accuracy": 0.813,
+        "macro_f1": 0.8124807036134631
+      },
+      "validation": {
+        "accuracy": 0.775,
+        "macro_f1": 0.7739945634353218
+      },
+      "test": {
+        "accuracy": 0.7308,
+        "macro_f1": 0.7199894053693301
+      },
+      "fit_diagnosis": {
+        "status": "balanced",
+        "underfit": false,
+        "overfit": false,
+        "domain_shift_sensitive": false,
+        "generalization_gap": 0.03848614017814134,
+        "validation_test_gap": 0.05400515806599171
+      },
+      "test_confusion": [
+        [
+          500,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0
+        ],
+        [
+          0,
+          497,
+          0,
+          3,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0
+        ],
+        [
+          0,
+          0,
+          164,
+          0,
+          0,
+          0,
+          0,
+          0,
+          336,
+          0
+        ],
+        [
+          0,
+          270,
+          0,
+          230,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0
+        ],
+        [
+          26,
+          0,
+          0,
+          0,
+          465,
+          9,
+          0,
+          0,
+          0,
+          0
+        ],
+        [
+          0,
+          0,
+          0,
+          0,
+          18,
+          482,
+          0,
+          0,
+          0,
+          0
+        ],
+        [
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          340,
+          160,
+          0,
+          0
+        ],
+        [
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          350,
+          150,
+          0,
+          0
+        ],
+        [
+          0,
+          0,
+          174,
+          0,
+          0,
+          0,
+          0,
+          0,
+          326,
+          0
+        ],
+        [
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          500
+        ]
+      ]
+    }
+  },
+  "elapsed_seconds": 125.6256372909993
+}

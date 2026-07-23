@@ -12,6 +12,8 @@ ML_DIR = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ML_DIR))
 
 from ringml.data import (  # noqa: E402
+    WindowDataset,
+    grouped_train_validation_test_split,
     grouped_train_validation_split,
     load_sessions,
     window_sessions,
@@ -59,6 +61,59 @@ class DatasetTests(unittest.TestCase):
             self.assertEqual(set(train.labels), {"idle", "wave"})
             self.assertEqual(set(validation.labels), {"idle", "wave"})
             self.assertTrue(np.max(np.abs(dataset.windows)) < 1)
+
+    def test_predefined_subject_split_has_no_leakage(self) -> None:
+        labels = np.asarray(
+            [label for subject in range(6) for label in ("idle", "wave")]
+        )
+        subjects = np.asarray(
+            [f"subject-{subject}" for subject in range(6) for _ in range(2)]
+        )
+        partitions = np.asarray(
+            [
+                partition
+                for subject in range(6)
+                for partition in (
+                    ("train", "train")
+                    if subject < 2
+                    else ("validation", "validation")
+                    if subject < 4
+                    else ("test", "test")
+                )
+            ]
+        )
+        dataset = WindowDataset(
+            windows=np.zeros((12, 20, 6)),
+            labels=labels,
+            groups=np.asarray([f"session-{index}" for index in range(12)]),
+            subjects=subjects,
+            partitions=partitions,
+        )
+        train, validation, test, method = grouped_train_validation_test_split(
+            dataset, use_predefined=True
+        )
+        self.assertEqual(method, "predefined")
+        self.assertFalse(set(train.subjects) & set(validation.subjects))
+        self.assertFalse(set(train.subjects) & set(test.subjects))
+        self.assertEqual(set(test.labels), {"idle", "wave"})
+
+    def test_predefined_subject_leakage_is_rejected(self) -> None:
+        dataset = WindowDataset(
+            windows=np.zeros((6, 20, 6)),
+            labels=np.asarray(["idle", "wave"] * 3),
+            groups=np.asarray([f"session-{index}" for index in range(6)]),
+            subjects=np.asarray(
+                ["shared", "train-only", "shared", "validation-only",
+                 "test-a", "test-b"]
+            ),
+            partitions=np.asarray(
+                ["train", "train", "validation", "validation", "test", "test"]
+            ),
+        )
+        with self.assertRaisesRegex(ValueError, "group leakage"):
+            grouped_train_validation_test_split(
+                dataset, use_predefined=True
+            )
 
 
 if __name__ == "__main__":

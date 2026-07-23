@@ -8,3 +8,4 @@ __pycache__/
 sdk/captures/
 ml/data/
 ml/models/
+ml/results/**/*.log

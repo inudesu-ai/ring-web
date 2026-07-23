@@ -1,0 +1,85 @@
+{
+  "schema": "six-axis-drift-benchmark/v1",
+  "duration_seconds": 180.0,
+  "sample_rate_hz": 100.0,
+  "known_gyro_bias_dps": [
+    0.48,
+    -0.32,
+    0.72
+  ],
+  "initial_estimated_gyro_bias_dps": [
+    0.4910090130343955,
+    -0.32755810145920367,
+    0.7275488100447801
+  ],
+  "known_accel_bias_g": [
+    0.012,
+    -0.01,
+    0.018
+  ],
+  "initial_estimated_accel_bias_g": [
+    0.011859124503099425,
+    -0.010178489249717782,
+    0.01825566236942544
+  ],
+  "stationary_detection": {
+    "precision": 0.9428361653031256,
+    "recall": 0.9987777777777778
+  },
+  "orientation": {
+    "gyro_raw": {
+      "tilt_rmse_deg": 52.7521290452927,
+      "tilt_p95_deg": 84.87670056844414,
+      "yaw_rmse_deg": 77.6704268135908,
+      "yaw_final_error_deg": 179.1424049131729
+    },
+    "gyro_calibrated": {
+      "tilt_rmse_deg": 3.4291132691634605,
+      "tilt_p95_deg": 4.628046632360869,
+      "yaw_rmse_deg": 7.927380088669896,
+      "yaw_final_error_deg": -17.433437599502934
+    },
+    "mahony": {
+      "tilt_rmse_deg": 2.728725855410699,
+      "tilt_p95_deg": 6.697501914602721,
+      "yaw_rmse_deg": 100.54738388196861,
+      "yaw_final_error_deg": -88.88415808432778
+    },
+    "madgwick": {
+      "tilt_rmse_deg": 2.5999262121834543,
+      "tilt_p95_deg": 6.090878560025828,
+      "yaw_rmse_deg": 67.82198728060737,
+      "yaw_final_error_deg": 113.61748962717569
+    },
+    "vqf": {
+      "tilt_rmse_deg": 0.9299885408831204,
+      "tilt_p95_deg": 1.3961836724499923,
+      "yaw_rmse_deg": 0.5944484539048828,
+      "yaw_final_error_deg": -1.2965701826902998
+    },
+    "fusion": {
+      "tilt_rmse_deg": 1.3885568057709814,
+      "tilt_p95_deg": 2.6724187506920773,
+      "yaw_rmse_deg": 6.9377845956460735,
+      "yaw_final_error_deg": -2.7082061061524723
+    }
+  },
+  "position": {
+    "raw_double_integration": {
+      "final_error_m": 6149.578057057006,
+      "rmse_m": 2377.388331938789,
+      "max_error_m": 6149.578057057006
+    },
+    "fused_orientation": {
+      "final_error_m": 2399.5346650526853,
+      "rmse_m": 1080.355886350547,
+      "max_error_m": 2399.5346650526853
+    },
+    "fused_zupt": {
+      "final_error_m": 10.74584602408825,
+      "rmse_m": 6.753164811171567,
+      "max_error_m": 10.74586616224269
+    }
+  },
+  "yaw_observability": "Six-axis gravity updates constrain roll/pitch but not absolute yaw; yaw bias remains unobservable without an external heading reference."
+}

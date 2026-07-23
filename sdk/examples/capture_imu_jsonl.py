@@ -32,6 +32,11 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--address", required=True, help="Ring BLE MAC/UUID address.")
     parser.add_argument("--label", required=True, help="Gesture class for this session.")
     parser.add_argument(
+        "--subject-id",
+        default=None,
+        help="Anonymous participant ID for subject-independent evaluation.",
+    )
+    parser.add_argument(
         "--duration",
         type=positive_float,
         default=30.0,
@@ -100,6 +105,7 @@ async def capture(args: argparse.Namespace) -> int:
                         row = {
                             "schema": "ring-imu/v1",
                             "session_id": session_id,
+                            "subject_id": args.subject_id or "",
                             "label": args.label,
                             "sdk_version": sdk.__version__,
                             "sample_rate_hz": start_info.sample_rate_hz,

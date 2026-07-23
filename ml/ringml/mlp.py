@@ -36,8 +36,9 @@ class MLPClassifier:
         self.stride_seconds = float(stride_seconds)
         self.hidden_size = int(hidden_size)
         self.seed = int(seed)
-        self.feature_mean = np.zeros(self.target_steps * 6)
-        self.feature_std = np.ones(self.target_steps * 6)
+        # Per-step channels: raw 6D, first difference 6D, accel/gyro magnitudes.
+        self.feature_mean = np.zeros(self.target_steps * 14)
+        self.feature_std = np.ones(self.target_steps * 14)
         self.weights_1: np.ndarray | None = None
         self.bias_1: np.ndarray | None = None
         self.weights_2: np.ndarray | None = None
@@ -51,7 +52,17 @@ class MLPClassifier:
                 f"Expected windows shaped [N, {self.target_steps}, 6], "
                 f"got {values.shape}"
             )
-        return values.reshape(len(values), -1)
+        differences = np.diff(values, axis=1, prepend=values[:, :1, :])
+        magnitudes = np.stack(
+            [
+                np.linalg.norm(values[:, :, :3], axis=2),
+                np.linalg.norm(values[:, :, 3:], axis=2),
+            ],
+            axis=2,
+        )
+        return np.concatenate([values, differences, magnitudes], axis=2).reshape(
+            len(values), -1
+        )
 
     def fit(
         self,

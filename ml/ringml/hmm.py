@@ -79,60 +79,119 @@ class GaussianHMMClassifier:
         stride_seconds: float,
         state_count: int = 5,
         variance_floor: float = 1e-3,
+        topology: str = "left_right",
+        feature_mode: str = "raw_delta_magnitude",
     ) -> None:
         if state_count < 2:
             raise ValueError("state_count must be at least 2")
+        if topology not in {"left_right", "ergodic"}:
+            raise ValueError("topology must be left_right or ergodic")
+        if feature_mode not in {"raw", "raw_delta_magnitude"}:
+            raise ValueError("Unsupported HMM feature_mode")
         self.classes = np.asarray(classes, dtype=str)
         self.target_steps = int(target_steps)
         self.window_seconds = float(window_seconds)
         self.stride_seconds = float(stride_seconds)
         self.state_count = int(state_count)
         self.variance_floor = float(variance_floor)
-        self.feature_mean = np.zeros(6)
-        self.feature_std = np.ones(6)
+        self.topology = topology
+        self.feature_mode = feature_mode
+        feature_count = 6 if feature_mode == "raw" else 14
+        self.feature_mean = np.zeros(feature_count)
+        self.feature_std = np.ones(feature_count)
         self.initial: np.ndarray | None = None
         self.transitions: np.ndarray | None = None
         self.means: np.ndarray | None = None
         self.variances: np.ndarray | None = None
         self.metadata: dict = {}
 
+    def _transform(self, windows: np.ndarray) -> np.ndarray:
+        values = np.asarray(windows, dtype=np.float64)
+        if values.ndim != 3 or values.shape[1:] != (self.target_steps, 6):
+            raise ValueError(
+                f"Expected windows shaped [N, {self.target_steps}, 6], "
+                f"got {values.shape}"
+            )
+        if self.feature_mode == "raw":
+            return values
+        differences = np.diff(values, axis=1, prepend=values[:, :1, :])
+        magnitudes = np.stack(
+            [
+                np.linalg.norm(values[:, :, :3], axis=2),
+                np.linalg.norm(values[:, :, 3:], axis=2),
+            ],
+            axis=2,
+        )
+        return np.concatenate([values, differences, magnitudes], axis=2)
+
     def _initialize_class(
         self, sequences: Sequence[np.ndarray]
     ) -> tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
-        initial = np.zeros(self.state_count)
-        initial[0] = 1.0
-        transitions = np.zeros((self.state_count, self.state_count))
-        for state in range(self.state_count - 1):
-            transitions[state, state] = 0.7
-            transitions[state, state + 1] = 0.3
-        transitions[-1, -1] = 1.0
-
-        state_values: list[list[np.ndarray]] = [
-            [] for _ in range(self.state_count)
-        ]
-        for sequence in sequences:
-            boundaries = np.linspace(0, len(sequence), self.state_count + 1).astype(int)
-            for state in range(self.state_count):
-                values = sequence[boundaries[state] : boundaries[state + 1]]
-                if len(values):
-                    state_values[state].append(values)
         pooled = np.concatenate(sequences)
         global_variance = np.maximum(pooled.var(axis=0), self.variance_floor)
-        means = np.vstack(
-            [
-                np.concatenate(values).mean(axis=0) if values else pooled.mean(axis=0)
-                for values in state_values
+        if self.topology == "left_right":
+            initial = np.zeros(self.state_count)
+            initial[0] = 1.0
+            transitions = np.zeros((self.state_count, self.state_count))
+            for state in range(self.state_count - 1):
+                transitions[state, state] = 0.7
+                transitions[state, state + 1] = 0.3
+            transitions[-1, -1] = 1.0
+            state_values: list[list[np.ndarray]] = [
+                [] for _ in range(self.state_count)
             ]
+            for sequence in sequences:
+                boundaries = np.linspace(
+                    0, len(sequence), self.state_count + 1
+                ).astype(int)
+                for state in range(self.state_count):
+                    values = sequence[boundaries[state] : boundaries[state + 1]]
+                    if len(values):
+                        state_values[state].append(values)
+            means = np.vstack(
+                [
+                    np.concatenate(values).mean(axis=0)
+                    if values
+                    else pooled.mean(axis=0)
+                    for values in state_values
+                ]
+            )
+        else:
+            initial = np.full(self.state_count, 1.0 / self.state_count)
+            transitions = np.full(
+                (self.state_count, self.state_count),
+                0.35 / (self.state_count - 1),
+            )
+            np.fill_diagonal(transitions, 0.65)
+            # Deterministic farthest-point initialisation followed by short k-means.
+            means = [pooled[0]]
+            minimum_distance = np.sum((pooled - means[0]) ** 2, axis=1)
+            for _ in range(1, self.state_count):
+                means.append(pooled[int(np.argmax(minimum_distance))])
+                distance = np.sum((pooled - means[-1]) ** 2, axis=1)
+                minimum_distance = np.minimum(minimum_distance, distance)
+            means = np.asarray(means)
+            for _ in range(8):
+                distance = np.sum(
+                    (pooled[:, None, :] - means[None, :, :]) ** 2, axis=2
+                )
+                assignment = np.argmin(distance, axis=1)
+                for state in range(self.state_count):
+                    if np.any(assignment == state):
+                        means[state] = pooled[assignment == state].mean(axis=0)
+        distance = np.sum(
+            (pooled[:, None, :] - means[None, :, :]) ** 2, axis=2
         )
+        assignment = np.argmin(distance, axis=1)
         variances = np.vstack(
             [
                 np.maximum(
-                    np.concatenate(values).var(axis=0)
-                    if values
+                    pooled[assignment == state].var(axis=0)
+                    if np.any(assignment == state)
                     else global_variance,
                     self.variance_floor,
                 )
-                for values in state_values
+                for state in range(self.state_count)
             ]
         )
         return initial, transitions, means, variances
@@ -196,11 +255,12 @@ class GaussianHMMClassifier:
             )
             for state in range(self.state_count):
                 allowed = transition_mask[state]
-                total = transition_counts[state, allowed].sum()
+                # Tiny Dirichlet smoothing prevents valid transitions from
+                # collapsing to exact zero during Baum-Welch.
+                smoothed = transition_counts[state, allowed] + 1e-10
+                total = smoothed.sum()
                 if total > 1e-12:
-                    transitions[state, allowed] = (
-                        transition_counts[state, allowed] / total
-                    )
+                    transitions[state, allowed] = smoothed / total
 
             average = total_log_likelihood / len(sequences)
             history.append(float(average))
@@ -216,13 +276,12 @@ class GaussianHMMClassifier:
         max_iterations: int = 40,
         tolerance: float = 1e-3,
     ) -> dict[str, list[float]]:
-        values = np.asarray(windows, dtype=np.float64)
-        if values.ndim != 3 or values.shape[1:] != (self.target_steps, 6):
-            raise ValueError(
-                f"Expected windows shaped [N, {self.target_steps}, 6], got {values.shape}"
-            )
-        self.feature_mean = values.reshape(-1, 6).mean(axis=0)
-        self.feature_std = np.maximum(values.reshape(-1, 6).std(axis=0), 1e-6)
+        values = self._transform(windows)
+        feature_count = values.shape[2]
+        self.feature_mean = values.reshape(-1, feature_count).mean(axis=0)
+        self.feature_std = np.maximum(
+            values.reshape(-1, feature_count).std(axis=0), 1e-6
+        )
         standardized = (values - self.feature_mean) / self.feature_std
 
         initial_values = []
@@ -262,11 +321,7 @@ class GaussianHMMClassifier:
             )
         ):
             raise ValueError("Model has not been trained")
-        values = np.asarray(windows, dtype=np.float64)
-        if values.ndim != 3 or values.shape[1:] != (self.target_steps, 6):
-            raise ValueError(
-                f"Expected windows shaped [N, {self.target_steps}, 6], got {values.shape}"
-            )
+        values = self._transform(windows)
         standardized = (values - self.feature_mean) / self.feature_std
         scores = np.empty((len(values), len(self.classes)))
         for row, sequence in enumerate(standardized):
@@ -303,6 +358,8 @@ class GaussianHMMClassifier:
             stride_seconds=np.asarray(self.stride_seconds),
             state_count=np.asarray(self.state_count),
             variance_floor=np.asarray(self.variance_floor),
+            topology=np.asarray(self.topology),
+            feature_mode=np.asarray(self.feature_mode),
             feature_mean=self.feature_mean,
             feature_std=self.feature_std,
             initial=self.initial,
@@ -325,6 +382,16 @@ class GaussianHMMClassifier:
                 stride_seconds=float(values["stride_seconds"]),
                 state_count=int(values["state_count"]),
                 variance_floor=float(values["variance_floor"]),
+                topology=(
+                    str(values["topology"])
+                    if "topology" in values.files
+                    else "left_right"
+                ),
+                feature_mode=(
+                    str(values["feature_mode"])
+                    if "feature_mode" in values.files
+                    else "raw"
+                ),
             )
             model.feature_mean = values["feature_mean"].copy()
             model.feature_std = values["feature_std"].copy()

@@ -46,10 +46,11 @@ complete API guide.
 
 The [`ml/`](ml/) pipeline includes:
 
-- a left-to-right diagonal Gaussian HMM trained with Baum-Welch EM;
+- a configurable left-to-right/ergodic diagonal Gaussian HMM trained with
+  Baum-Welch EM;
 - a small NumPy MLP trained with Adam, class balancing, dropout, and early
   stopping;
-- session-aware train/validation splitting;
+- subject/session-aware train/validation/test splitting;
 - portable `.npz` model files;
 - live BLE inference and authenticated publishing to the Web dashboard.
 
@@ -80,6 +81,8 @@ python ml/realtime_infer.py \
 ```
 
 Full training and collection instructions are in [`ml/README.md`](ml/README.md).
+The completed one-million-row simulation and six-axis drift benchmark are
+summarized in [`ml/results/RESULTS.md`](ml/results/RESULTS.md).
 
 ## Live gesture API
 
