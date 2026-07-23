@@ -2,6 +2,46 @@
 
 Web/API starter for `inudesu.xyz` and the `inudesu-ai` organization.
 
+## Ring Sound SDK
+
+The repository vendors the Python **Ring Sound SDK 0.4.1** in [`sdk/`](sdk/).
+It supports BLE discovery and connection, system information, audio transfer,
+real-time six-axis IMU data, and built-in HMM gesture events.
+
+```bash
+python3 -m venv .venv
+source .venv/bin/activate
+python -m pip install -r sdk/requirements.txt
+
+# Scan nearby BLE devices.
+python sdk/ring_sound.py scan
+
+# Read ring system information.
+python sdk/ring_sound.py info --address YOUR_RING_ADDRESS
+```
+
+The ring must already be in gesture mode before real-time IMU reporting can be
+started. Capture labeled IMU samples for the upcoming classifier:
+
+```bash
+python sdk/examples/capture_imu_jsonl.py \
+  --address YOUR_RING_ADDRESS \
+  --label wave \
+  --duration 30 \
+  --output sdk/captures/wave-001.jsonl
+```
+
+Monitor the firmware's built-in HMM gesture output:
+
+```bash
+python sdk/examples/hmm_gesture_monitor.py \
+  --address YOUR_RING_ADDRESS
+```
+
+See [`sdk/INTEGRATION.md`](sdk/INTEGRATION.md) for the import manifest and
+migration notes, and [`sdk/ring_sound_use.md`](sdk/ring_sound_use.md) for the
+complete API guide.
+
 ## DNS
 
 Cloudflare records should point to the AWS EC2 public IPv4 address:

@@ -1,0 +1,18 @@
+{
+  "archive": "ring_sound_SDKv2.0.zip",
+  "archive_sha256": "6c070ec528ca12e0b3288d9ca404c18fa674e45997ff47c31ffd5c4407363b3c",
+  "imported_at": "2026-07-23",
+  "sdk_version": "0.4.1",
+  "protocol_version": 4,
+  "firmware_baseline": "V2.000.0001.0015",
+  "included": [
+    "ring_sound.py",
+    "README.md",
+    "protocol.md",
+    "ring_sound_use.md"
+  ],
+  "excluded": [
+    "demo.apk",
+    "STEP/CAD models"
+  ]
+}

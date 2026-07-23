@@ -22,3 +22,18 @@ jobs:
           npm start &
           sleep 2
           curl -fsS http://127.0.0.1:3000/health
+
+  sdk-test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - run: >-
+          python -m py_compile
+          sdk/ring_sound.py
+          sdk/examples/capture_imu_jsonl.py
+          sdk/examples/hmm_gesture_monitor.py
+      - run: python -m unittest discover -s sdk/tests -v
+      - run: python sdk/ring_sound.py --help
