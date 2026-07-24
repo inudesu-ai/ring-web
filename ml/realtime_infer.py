@@ -29,6 +29,7 @@ from ringml.direction import (  # noqa: E402
     DirectionDecision,
     DirectionalGestureRecognizer,
     blend_direction_probabilities,
+    swap_vertical_probabilities,
 )
 from ringml.displacement import DisplacementTracker  # noqa: E402
 from ringml.model import load_model  # noqa: E402
@@ -434,7 +435,10 @@ async def run(args: argparse.Namespace) -> None:
                     window = resample_window(
                         np.asarray(raw_window), model.target_steps
                     )[None, :, :]
-                    probabilities = model.predict_proba(window)[0]
+                    probabilities = swap_vertical_probabilities(
+                        model.classes,
+                        model.predict_proba(window)[0],
+                    )
                     smoothed = (
                         probabilities
                         if smoothed is None

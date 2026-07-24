@@ -13,6 +13,26 @@ from .displacement import DisplacementEstimate
 CARDINAL_GESTURES = frozenset({"left", "right", "up", "down"})
 
 
+def swap_vertical_probabilities(
+    classes: np.ndarray,
+    probabilities: np.ndarray,
+) -> np.ndarray:
+    """Map the simulated model's vertical convention to the physical ring."""
+
+    labels = np.asarray(classes, dtype=str)
+    values = np.asarray(probabilities, dtype=np.float64).copy()
+    up = np.flatnonzero(labels == "up")
+    down = np.flatnonzero(labels == "down")
+    if len(up) and len(down):
+        up_index = int(up[0])
+        down_index = int(down[0])
+        values[up_index], values[down_index] = (
+            values[down_index],
+            values[up_index],
+        )
+    return values
+
+
 @dataclass(frozen=True)
 class DirectionDecision:
     label: str

@@ -12,6 +12,7 @@ sys.path.insert(0, str(ML_DIR))
 from ringml.direction import (  # noqa: E402
     DirectionalGestureRecognizer,
     blend_direction_probabilities,
+    swap_vertical_probabilities,
 )
 from ringml.displacement import DisplacementEstimate  # noqa: E402
 
@@ -108,6 +109,14 @@ class DirectionRecognizerTests(unittest.TestCase):
         self.assertEqual(classes[int(np.argmax(fused))], "left")
         self.assertGreater(float(np.max(fused)), 0.75)
         self.assertAlmostEqual(float(np.sum(fused)), 1.0, places=9)
+
+    def test_physical_ring_vertical_labels_are_swapped(self) -> None:
+        classes = np.asarray(["left", "up", "wave", "down"])
+        simulated = np.asarray([0.05, 0.80, 0.10, 0.05])
+        physical = swap_vertical_probabilities(classes, simulated)
+        self.assertAlmostEqual(physical[1], 0.05)
+        self.assertAlmostEqual(physical[3], 0.80)
+        self.assertAlmostEqual(float(np.sum(physical)), 1.0)
 
 
 if __name__ == "__main__":
