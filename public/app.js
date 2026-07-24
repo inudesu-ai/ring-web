@@ -35,9 +35,8 @@ const elements = {
   demoToggle: document.querySelector('#demo-toggle'),
 };
 
-const local = ['localhost', '127.0.0.1'].includes(window.location.hostname);
 const query = new URLSearchParams(window.location.search);
-const apiBase = query.get('api') || (local ? 'http://127.0.0.1:3000' : 'https://api.inudesu.xyz');
+const apiBase = query.get('api') || 'http://192.168.5.2:3000';
 const socketBase = apiBase.replace(/^http/, 'ws');
 const webSocketUrl = `${socketBase}/ws`;
 
