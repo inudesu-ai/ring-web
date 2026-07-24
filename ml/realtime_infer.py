@@ -43,6 +43,11 @@ def build_parser() -> argparse.ArgumentParser:
         "--name",
         help="Advertised BLE name, e.g. ring; recommended on macOS.",
     )
+    parser.add_argument(
+        "--cpuid",
+        default=None,
+        help="Optional expected ring CPUID; rejects another device with the same name.",
+    )
     parser.add_argument("--model", type=Path, required=True, help="Trained .npz model.")
     parser.add_argument(
         "--threshold",
@@ -148,11 +153,13 @@ def put_latest(queue: asyncio.Queue[dict], payload: dict) -> None:
 async def start_sensor_stream(ring: sdk.RingSoundClient) -> sdk.SensorStartInfo:
     key_press_count = 0
     last_key_press_at: float | None = None
+    key_single_press = asyncio.Event()
 
     def on_key_single_press(_packet: object) -> None:
         nonlocal key_press_count, last_key_press_at
         key_press_count += 1
         last_key_press_at = time.monotonic()
+        key_single_press.set()
         print(
             f"Ring single-click received ({key_press_count}); "
             "waiting for gesture mode...",
@@ -174,27 +181,45 @@ async def start_sensor_stream(ring: sdk.RingSoundClient) -> sdk.SensorStartInfo:
             file=sys.stderr,
             flush=True,
         )
-        # Poll the actual mode instead of depending solely on the unsolicited
-        # 0x0704 notification, which can be dropped. On this firmware revision,
-        # a START_REPORT request can also race mode initialization immediately
-        # after 0x0704, so re-arm it once the 800 ms transition window settles.
-        deadline = time.monotonic() + 60.0
+        # Wait passively for 0x0704 so repeated START_REPORT requests cannot
+        # keep the firmware busy while it is trying to switch modes. Probe only
+        # every eight seconds as a fallback for a dropped key notification.
+        # The V2.000.0001.0015 firmware needs roughly 800 ms after 0x0704 before
+        # START_REPORT can be armed reliably.
+        deadline = time.monotonic() + 90.0
+        observed_key_count = 0
         while time.monotonic() < deadline:
-            await asyncio.sleep(1.0)
+            key_single_press.clear()
+            click_received = key_press_count > observed_key_count
+            try:
+                if not click_received:
+                    await asyncio.wait_for(key_single_press.wait(), timeout=8.0)
+                    click_received = True
+                observed_key_count = key_press_count
+                if click_received and last_key_press_at is not None:
+                    remaining = 0.9 - (time.monotonic() - last_key_press_at)
+                    if remaining > 0:
+                        await asyncio.sleep(remaining)
+            except asyncio.TimeoutError:
+                # A mode switch may succeed even when its unsolicited 0x0704
+                # packet is lost, so occasionally check the real report state.
+                pass
+
             try:
                 start = await sdk.start_sensor_report(ring)
             except sdk.DeviceError as exc:
                 if exc.error_code != 2:
                     raise
+                if click_received:
+                    print(
+                        "The click was received, but the ring did not finish "
+                        "switching modes. Single-click once more.",
+                        file=sys.stderr,
+                        flush=True,
+                    )
                 continue
-
-            if last_key_press_at is not None:
-                remaining = 0.8 - (time.monotonic() - last_key_press_at)
-                if remaining > 0:
-                    await asyncio.sleep(remaining)
-                start = await sdk.start_sensor_report(ring)
             return start
-        raise sdk.TimeoutError("Ring stayed in recording mode for 60 seconds")
+        raise sdk.TimeoutError("Ring stayed in recording mode for 90 seconds")
     finally:
         ring.remove_packet_handler(
             sdk.SensorCommand.KEY_SINGLE_PRESS,
@@ -255,6 +280,21 @@ async def run(args: argparse.Namespace) -> None:
         async with sdk.RingSoundClient(
             address=args.address, name=args.name
         ) as ring:
+            info = await sdk.get_system_info(ring)
+            print(
+                "Connected ring: "
+                f"cpuid={info.cpuid}, firmware={info.firmware_version}, "
+                f"battery={info.battery_percent}%",
+                file=sys.stderr,
+                flush=True,
+            )
+            if (
+                args.cpuid
+                and info.cpuid.casefold() != args.cpuid.strip().casefold()
+            ):
+                raise sdk.TransportError(
+                    f"Connected CPUID {info.cpuid!r}, expected {args.cpuid!r}"
+                )
             start_info = await start_sensor_stream(ring)
             report_started = True
             displacement = DisplacementTracker(

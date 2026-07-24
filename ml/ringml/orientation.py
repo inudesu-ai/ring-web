@@ -125,27 +125,49 @@ class SixAxisAhrs:
         accelerations = np.asarray([item[0] for item in values])
         gyroscopes = np.asarray([item[1] for item in values])
         accel_norms = np.linalg.norm(accelerations, axis=1)
-        accel_mean_norm = float(np.mean(accel_norms))
-        accel_axis_std = float(np.max(np.std(accelerations, axis=0)))
-        gyro_axis_std = float(np.max(np.std(gyroscopes, axis=0)))
+        # The current firmware occasionally emits a short sensor spike even
+        # when the ring is resting. Robust median/MAD statistics describe the
+        # visible fluctuation instead of letting one outlier keep the state in
+        # "moving" indefinitely.
+        accel_center = np.median(accelerations, axis=0)
+        gyro_center = np.median(gyroscopes, axis=0)
+        accel_axis_noise = float(
+            np.max(
+                1.4826
+                * np.median(
+                    np.abs(accelerations - accel_center),
+                    axis=0,
+                )
+            )
+        )
+        gyro_axis_noise = float(
+            np.max(
+                1.4826
+                * np.median(
+                    np.abs(gyroscopes - gyro_center),
+                    axis=0,
+                )
+            )
+        )
+        accel_mean_norm = float(np.median(accel_norms))
         half = max(1, len(accelerations) // 2)
         accel_drift = float(
             np.linalg.norm(
-                np.mean(accelerations[half:], axis=0)
-                - np.mean(accelerations[:half], axis=0)
+                np.median(accelerations[half:], axis=0)
+                - np.median(accelerations[:half], axis=0)
             )
         )
         stable_signal = bool(
             0.94 <= accel_mean_norm <= 1.06
-            and accel_axis_std <= 0.012
-            and accel_drift <= 0.018
-            and gyro_axis_std <= 0.85
+            and accel_axis_noise <= 0.014
+            and accel_drift <= 0.022
+            and gyro_axis_noise <= 1.0
         )
 
         norm_score = np.clip(1.0 - abs(accel_mean_norm - 1.0) / 0.06, 0.0, 1.0)
-        accel_score = np.clip(1.0 - accel_axis_std / 0.012, 0.0, 1.0)
-        drift_score = np.clip(1.0 - accel_drift / 0.018, 0.0, 1.0)
-        gyro_score = np.clip(1.0 - gyro_axis_std / 0.85, 0.0, 1.0)
+        accel_score = np.clip(1.0 - accel_axis_noise / 0.014, 0.0, 1.0)
+        drift_score = np.clip(1.0 - accel_drift / 0.022, 0.0, 1.0)
+        gyro_score = np.clip(1.0 - gyro_axis_noise / 1.0, 0.0, 1.0)
         signal_confidence = float(
             0.20 * norm_score
             + 0.30 * accel_score
@@ -153,7 +175,7 @@ class SixAxisAhrs:
             + 0.25 * gyro_score
         )
 
-        window_bias = np.median(gyroscopes, axis=0)
+        window_bias = gyro_center
         if stable_signal and not self.calibrated and duration >= self.calibration_window_s:
             self.gyro_bias_dps = window_bias
             self.corrected_gyro_dps = gyro - self.gyro_bias_dps
@@ -163,20 +185,35 @@ class SixAxisAhrs:
             self._initialize_from_accel(np.mean(accelerations, axis=0))
             self.gravity_integral.fill(0.0)
 
-        corrected_mean = np.mean(gyroscopes - self.gyro_bias_dps, axis=0)
-        rate_score = float(
-            np.clip(1.0 - np.linalg.norm(corrected_mean) / 1.2, 0.0, 1.0)
+        corrected_mean = gyro_center - self.gyro_bias_dps
+        current_accel_delta = float(np.linalg.norm(accel - accel_center))
+        current_gyro_delta = float(np.linalg.norm(gyro - gyro_center))
+        instant_quiet = bool(
+            current_accel_delta <= 0.075
+            and current_gyro_delta <= 7.0
         )
-        self.stationary_confidence = signal_confidence * rate_score
+        rate_score = float(
+            np.clip(1.0 - np.linalg.norm(corrected_mean) / 4.0, 0.0, 1.0)
+        )
+        # A slowly changing constant zero-bias is not motion. Weight the
+        # window's actual fluctuation much more heavily than its DC offset.
+        self.stationary_confidence = (
+            signal_confidence * (0.82 + 0.18 * rate_score)
+            if instant_quiet
+            else 0.0
+        )
         self.stationary = bool(
             stable_signal
-            and np.linalg.norm(corrected_mean) <= 0.8
+            and instant_quiet
+            and np.linalg.norm(corrected_mean) <= 3.5
             and self.stationary_confidence >= 0.62
         )
 
         if self.stationary and self.calibrated:
             # Track warm-up drift slowly, but only after a fused rest decision.
-            alpha = 1.0 - np.exp(-duration / 20.0)
+            # Use one sample's dt here; using the whole window duration on
+            # every sample would make the bias adaptation unintentionally fast.
+            alpha = 1.0 - np.exp(-values[-1][2] / 3.0)
             self.gyro_bias_dps += alpha * (window_bias - self.gyro_bias_dps)
 
     def update(

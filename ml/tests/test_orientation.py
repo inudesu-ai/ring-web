@@ -68,6 +68,50 @@ class LiveOrientationTests(unittest.TestCase):
             atol=1e-6,
         )
 
+    def test_low_fluctuation_bias_drift_remains_stationary(self) -> None:
+        estimator = SixAxisAhrs()
+        initial_bias = np.asarray([0.5, -9.0, -0.3])
+        for index in range(100):
+            noise = 0.002 * np.sin(index * 0.37)
+            estimator.update(
+                np.asarray([1.0 + noise, -0.5 * noise, 0.03]),
+                initial_bias + np.asarray([noise, -noise, 0.5 * noise]),
+                0.01,
+            )
+        self.assertTrue(estimator.calibrated)
+
+        final_bias = np.asarray([0.5, -8.1, -0.3])
+        for index in range(2000):
+            progress = index / 1999
+            drifted_bias = initial_bias + progress * (final_bias - initial_bias)
+            noise = 0.0025 * np.sin(index * 0.31)
+            estimator.update(
+                np.asarray([0.999 + noise, 0.4 * noise, 0.035]),
+                drifted_bias + np.asarray([noise, -noise, 0.5 * noise]),
+                0.01,
+            )
+
+        self.assertTrue(estimator.stationary)
+        self.assertGreater(estimator.stationary_confidence, 0.7)
+        self.assertLess(np.linalg.norm(estimator.corrected_gyro_dps), 0.35)
+
+    def test_obvious_change_exits_stationary_immediately(self) -> None:
+        estimator = SixAxisAhrs()
+        for _ in range(100):
+            estimator.update(
+                np.asarray([1.0, 0.0, 0.0]),
+                np.asarray([0.5, -9.0, -0.3]),
+                0.01,
+            )
+        self.assertTrue(estimator.stationary)
+        estimator.update(
+            np.asarray([1.0, 0.2, 0.0]),
+            np.asarray([45.0, -9.0, -0.3]),
+            0.01,
+        )
+        self.assertFalse(estimator.stationary)
+        self.assertEqual(estimator.stationary_confidence, 0.0)
+
 
 if __name__ == "__main__":
     unittest.main()

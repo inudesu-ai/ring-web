@@ -72,6 +72,7 @@ const state = {
   motionOrigin: [0, 0, 0],
   motionPosition: [0, 0, 0],
   motionVelocity: [0, 0, 0],
+  motionCameraPosition: [0, 0, 0],
   motionTrail: [],
   motionDistance: 0,
   motionZuptCount: 0,
@@ -406,7 +407,10 @@ function cameraRotate([x, y, z]) {
 }
 
 function project(point, width, height) {
-  const [x, y, z] = cameraRotate(point);
+  const cameraRelative = point.map(
+    (value, index) => value - state.motionCameraPosition[index],
+  );
+  const [x, y, z] = cameraRotate(cameraRelative);
   const depth = 5.8;
   const perspective = depth / Math.max(2.2, depth - z);
   const scale = Math.min(width, height) * 0.135;
@@ -628,6 +632,14 @@ function updatePoseReadout(quaternion) {
 function drawMotionCanvas() {
   const { context, width, height } = fitCanvas(elements.motionCanvas);
   context.clearRect(0, 0, width, height);
+  const scale = trajectoryScale();
+  // Follow the integrated endpoint in world space. The ring therefore stays
+  // inside the viewport while older trajectory points move behind it.
+  state.motionCameraPosition = [
+    state.motionPosition[0] * scale,
+    state.motionPosition[2] * scale,
+    state.motionPosition[1] * scale,
+  ];
   drawGrid(context, width, height);
   drawMotionTrail(context, width, height);
 
@@ -853,6 +865,7 @@ function startDemo() {
   state.demoGestureIndex = -1;
   state.history = [];
   state.motionTrail = [];
+  state.motionCameraPosition = [0, 0, 0];
   state.motionOrigin = [0, 0, 0];
   state.motionAbsolutePosition = [0, 0, 0];
   state.lastMotionAt = null;
@@ -873,6 +886,7 @@ function stopDemo() {
   state.demoTimer = null;
   state.history = [];
   state.motionTrail = [];
+  state.motionCameraPosition = [0, 0, 0];
   state.motionOrigin = [0, 0, 0];
   state.motionAbsolutePosition = [0, 0, 0];
   state.lastMotionAt = null;
@@ -893,6 +907,7 @@ elements.zeroPose.addEventListener('click', () => {
   state.motionPosition = [0, 0, 0];
   state.motionVelocity = [0, 0, 0];
   state.motionTrail = [];
+  state.motionCameraPosition = [0, 0, 0];
   const original = elements.zeroPose.lastChild.textContent;
   elements.zeroPose.lastChild.textContent = ' 已归零';
   window.setTimeout(() => {
