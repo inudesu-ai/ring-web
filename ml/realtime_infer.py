@@ -135,32 +135,60 @@ def put_latest(queue: asyncio.Queue[dict], payload: dict) -> None:
 
 
 async def start_sensor_stream(ring: sdk.RingSoundClient) -> sdk.SensorStartInfo:
-    try:
-        return await sdk.start_sensor_report(ring)
-    except sdk.DeviceError as exc:
-        if exc.error_code != 2:
-            raise
+    key_press_count = 0
+    last_key_press_at: float | None = None
 
-    print(
-        "Ring is in recording mode. Single-click the ring once to enter "
-        "gesture mode...",
-        file=sys.stderr,
-        flush=True,
-    )
-    for attempt in range(3):
-        await sdk.wait_sensor_key_single_press_event(ring, timeout_s=45.0)
-        await asyncio.sleep(0.35)
+    def on_key_single_press(_packet: object) -> None:
+        nonlocal key_press_count, last_key_press_at
+        key_press_count += 1
+        last_key_press_at = time.monotonic()
+        print(
+            f"Ring single-click received ({key_press_count}); "
+            "waiting for gesture mode...",
+            file=sys.stderr,
+            flush=True,
+        )
+
+    ring.add_packet_handler(sdk.SensorCommand.KEY_SINGLE_PRESS, on_key_single_press)
+    try:
         try:
             return await sdk.start_sensor_report(ring)
         except sdk.DeviceError as exc:
-            if exc.error_code != 2 or attempt == 2:
+            if exc.error_code != 2:
                 raise
-            print(
-                "Mode switch did not complete; single-click once more.",
-                file=sys.stderr,
-                flush=True,
-            )
-    raise RuntimeError("Unable to enter gesture mode")
+
+        print(
+            "Ring is in recording mode. Single-click the ring once to enter "
+            "gesture mode...",
+            file=sys.stderr,
+            flush=True,
+        )
+        # Poll the actual mode instead of depending solely on the unsolicited
+        # 0x0704 notification, which can be dropped. On this firmware revision,
+        # a START_REPORT request can also race mode initialization immediately
+        # after 0x0704, so re-arm it once the 800 ms transition window settles.
+        deadline = time.monotonic() + 60.0
+        while time.monotonic() < deadline:
+            await asyncio.sleep(1.0)
+            try:
+                start = await sdk.start_sensor_report(ring)
+            except sdk.DeviceError as exc:
+                if exc.error_code != 2:
+                    raise
+                continue
+
+            if last_key_press_at is not None:
+                remaining = 0.8 - (time.monotonic() - last_key_press_at)
+                if remaining > 0:
+                    await asyncio.sleep(remaining)
+                start = await sdk.start_sensor_report(ring)
+            return start
+        raise sdk.TimeoutError("Ring stayed in recording mode for 60 seconds")
+    finally:
+        ring.remove_packet_handler(
+            sdk.SensorCommand.KEY_SINGLE_PRESS,
+            on_key_single_press,
+        )
 
 
 async def run(args: argparse.Namespace) -> None:
