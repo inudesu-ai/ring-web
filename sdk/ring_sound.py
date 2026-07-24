@@ -29,6 +29,7 @@ NUS_RX_UUID = "6E400002-B5A3-F393-E0A9-E50E24DCCA9E"
 
 DEFAULT_SCAN_TIMEOUT_S = 25.0
 DEFAULT_COMMAND_TIMEOUT_S = 10.0
+DEFAULT_NAME_MIN_RSSI_DBM = int(os.getenv("RING_NAME_MIN_RSSI_DBM", "-95"))
 _NUS_WRITE_CHUNK_SIZE = 20
 
 DEFAULT_SAMPLE_RATE = 16000
@@ -557,6 +558,7 @@ class NusClient:
         rx_uuid: str = NUS_RX_UUID,
         scan_timeout_s: float = DEFAULT_SCAN_TIMEOUT_S,
         write_with_response: bool = False,
+        name_min_rssi_dbm: int | None = DEFAULT_NAME_MIN_RSSI_DBM,
     ) -> None:
         self.address = address
         self.name = str(name or "").strip() or None
@@ -565,6 +567,7 @@ class NusClient:
         self.rx_uuid = rx_uuid
         self.scan_timeout_s = scan_timeout_s
         self.write_with_response = write_with_response
+        self.name_min_rssi_dbm = name_min_rssi_dbm
         self._client: Any | None = None
         self._rx_callback: RxCallback | None = None
         self._disconnect_callback: DisconnectCallback | None = None
@@ -638,8 +641,9 @@ class NusClient:
                         for value in (getattr(adv, "service_uuids", None) or [])
                     }
                     and (
-                        getattr(adv, "rssi", None) is None
-                        or int(getattr(adv, "rssi")) >= -82
+                        self.name_min_rssi_dbm is None
+                        or getattr(adv, "rssi", None) is None
+                        or int(getattr(adv, "rssi")) >= self.name_min_rssi_dbm
                     )
                 )
             ),
@@ -649,7 +653,7 @@ class NusClient:
             if self.address is None:
                 raise TransportError(
                     f"Nearby BLE device name={self.name!r} with NUS service "
-                    "was not found (minimum RSSI -82 dBm)"
+                    f"was not found (minimum RSSI {self.name_min_rssi_dbm} dBm)"
                 )
             target = self.address
         else:
