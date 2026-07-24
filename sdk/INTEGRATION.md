@@ -37,6 +37,13 @@ python -m pip install -r sdk/requirements.txt
 python sdk/ring_sound.py scan
 ```
 
+On macOS, CoreBluetooth UUIDs may change between advertisements. Connect by
+advertised name instead:
+
+```bash
+python sdk/ring_sound.py info --name ring
+```
+
 Audio decoding additionally requires `ffmpeg`. BLE access runs on the machine
 physically near the ring; an AWS EC2 instance normally has no Bluetooth radio.
 The planned production data path is:

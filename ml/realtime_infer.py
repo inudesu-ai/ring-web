@@ -6,6 +6,7 @@ from __future__ import annotations
 import argparse
 import asyncio
 from collections import deque
+from contextlib import suppress
 import json
 import os
 from pathlib import Path
@@ -25,11 +26,17 @@ import ring_sound as sdk  # noqa: E402
 
 from ringml.data import resample_window  # noqa: E402
 from ringml.model import load_model  # noqa: E402
+from ringml.orientation import SixAxisAhrs  # noqa: E402
 
 
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description="Live Ring Sound gesture inference.")
-    parser.add_argument("--address", required=True, help="Ring BLE MAC/UUID address.")
+    target = parser.add_mutually_exclusive_group(required=True)
+    target.add_argument("--address", help="Ring BLE MAC/CoreBluetooth UUID.")
+    target.add_argument(
+        "--name",
+        help="Advertised BLE name, e.g. ring; recommended on macOS.",
+    )
     parser.add_argument("--model", type=Path, required=True, help="Trained .npz model.")
     parser.add_argument(
         "--threshold",
@@ -47,6 +54,20 @@ def build_parser() -> argparse.ArgumentParser:
         "--publish-url",
         default=None,
         help="Optional API endpoint, e.g. https://api.inudesu.xyz/v1/gesture.",
+    )
+    parser.add_argument(
+        "--telemetry-url",
+        default=None,
+        help=(
+            "Telemetry API endpoint. When omitted, /v1/gesture in --publish-url "
+            "is replaced by /v1/telemetry."
+        ),
+    )
+    parser.add_argument(
+        "--telemetry-hz",
+        type=float,
+        default=10.0,
+        help="Maximum orientation/IMU publish rate; zero disables telemetry.",
     )
     parser.add_argument(
         "--token-env",
@@ -77,6 +98,42 @@ def post_json(url: str, payload: dict, token: str | None) -> None:
             raise RuntimeError(f"Publisher returned HTTP {response.status}")
 
 
+def resolve_telemetry_url(
+    publish_url: str | None, telemetry_url: str | None
+) -> str | None:
+    if telemetry_url:
+        return telemetry_url
+    if publish_url and publish_url.rstrip("/").endswith("/v1/gesture"):
+        return f"{publish_url.rstrip('/')[:-len('/v1/gesture')]}/v1/telemetry"
+    return None
+
+
+async def telemetry_worker(
+    url: str,
+    token: str | None,
+    queue: asyncio.Queue[dict],
+) -> None:
+    last_error_at = 0.0
+    while True:
+        payload = await queue.get()
+        while not queue.empty():
+            payload = queue.get_nowait()
+        try:
+            await asyncio.to_thread(post_json, url, payload, token)
+        except (HTTPError, URLError, TimeoutError, RuntimeError) as exc:
+            now = time.monotonic()
+            if now - last_error_at >= 5.0:
+                print(f"telemetry publish failed: {exc}", file=sys.stderr)
+                last_error_at = now
+
+
+def put_latest(queue: asyncio.Queue[dict], payload: dict) -> None:
+    if queue.full():
+        with suppress(asyncio.QueueEmpty):
+            queue.get_nowait()
+    queue.put_nowait(payload)
+
+
 async def run(args: argparse.Namespace) -> None:
     if args.threshold is not None and not 0 <= args.threshold <= 1:
         raise ValueError("--threshold must be between zero and one")
@@ -84,6 +141,8 @@ async def run(args: argparse.Namespace) -> None:
         raise ValueError("--smoothing must be in (0, 1]")
     if args.max_predictions < 0:
         raise ValueError("--max-predictions cannot be negative")
+    if not 0 <= args.telemetry_hz <= 30:
+        raise ValueError("--telemetry-hz must be between zero and 30")
 
     model = load_model(args.model)
     threshold = (
@@ -92,11 +151,26 @@ async def run(args: argparse.Namespace) -> None:
         else float(model.metadata.get("recommended_threshold", 0.7))
     )
     token = os.getenv(args.token_env)
+    telemetry_url = resolve_telemetry_url(
+        args.publish_url, args.telemetry_url
+    )
+    telemetry_queue: asyncio.Queue[dict] = asyncio.Queue(maxsize=1)
+    telemetry_task = (
+        asyncio.create_task(
+            telemetry_worker(telemetry_url, token, telemetry_queue)
+        )
+        if telemetry_url and args.telemetry_hz > 0
+        else None
+    )
     raw_window: deque[list[float]] = deque()
     smoothed: np.ndarray | None = None
     samples_since_prediction = 0
     prediction_count = 0
     report_started = False
+    ahrs = SixAxisAhrs()
+    source = socket.gethostname()
+    last_timestamp_ms: int | None = None
+    last_telemetry_at = 0.0
 
     print(
         f"Loaded {model.model_type}: {', '.join(model.classes.tolist())}; "
@@ -105,22 +179,74 @@ async def run(args: argparse.Namespace) -> None:
     )
     print("Put the ring in gesture mode before connecting.", file=sys.stderr)
 
-    async with sdk.RingSoundClient(address=args.address) as ring:
-        start_info = await sdk.start_sensor_report(ring)
-        report_started = True
-        source_window_size = max(
-            2, round(model.window_seconds * start_info.sample_rate_hz)
-        )
-        stride_size = max(1, round(model.stride_seconds * start_info.sample_rate_hz))
-        raw_window = deque(maxlen=source_window_size)
+    try:
+        async with sdk.RingSoundClient(
+            address=args.address, name=args.name
+        ) as ring:
+            start_info = await sdk.start_sensor_report(ring)
+            report_started = True
+            source_window_size = max(
+                2, round(model.window_seconds * start_info.sample_rate_hz)
+            )
+            stride_size = max(
+                1, round(model.stride_seconds * start_info.sample_rate_hz)
+            )
+            raw_window = deque(maxlen=source_window_size)
+            print(
+                "IMU stream: "
+                f"{start_info.sample_rate_hz} Hz, "
+                f"±{start_info.accel_range_g} g, "
+                f"±{start_info.gyro_range_dps} dps",
+                file=sys.stderr,
+            )
 
-        try:
             while args.max_predictions == 0 or prediction_count < args.max_predictions:
                 try:
                     batch = await sdk.wait_sensor_data(ring, timeout_s=5.0)
                 except sdk.TimeoutError:
                     continue
-                for sample in batch.samples:
+                for sample_index, sample in enumerate(batch.samples):
+                    accel_g = np.asarray(
+                        [sample.accel_x, sample.accel_y, sample.accel_z],
+                        dtype=np.float64,
+                    ) / 32768.0 * start_info.accel_range_g
+                    gyro_dps = np.asarray(
+                        [sample.gyro_x, sample.gyro_y, sample.gyro_z],
+                        dtype=np.float64,
+                    ) / 32768.0 * start_info.gyro_range_dps
+                    default_dt = 1.0 / start_info.sample_rate_hz
+                    if last_timestamp_ms is None:
+                        dt = default_dt
+                    else:
+                        elapsed_ms = (
+                            sample.timestamp_ms - last_timestamp_ms
+                        ) & 0xFFFFFFFF
+                        dt = (
+                            elapsed_ms / 1000.0
+                            if 0 < elapsed_ms < 200
+                            else default_dt
+                        )
+                    last_timestamp_ms = sample.timestamp_ms
+                    ahrs.update(accel_g, gyro_dps, dt)
+
+                    now = time.monotonic()
+                    if (
+                        telemetry_task is not None
+                        and now - last_telemetry_at
+                        >= 1.0 / args.telemetry_hz
+                    ):
+                        telemetry = ahrs.telemetry(accel_g, gyro_dps)
+                        telemetry.update(
+                            {
+                                "sample_rate_hz": start_info.sample_rate_hz,
+                                "sequence": batch.sequence_start + sample_index,
+                                "device_timestamp_ms": sample.timestamp_ms,
+                                "source": source,
+                            }
+                        )
+                        put_latest(telemetry_queue, telemetry)
+                        last_telemetry_at = now
+
                     raw_window.append(
                         [
                             sample.accel_x / 32768.0,
@@ -163,7 +289,7 @@ async def run(args: argparse.Namespace) -> None:
                         },
                         "model_type": model.model_type,
                         "model_file": args.model.name,
-                        "source": socket.gethostname(),
+                        "source": source,
                         "device_timestamp_ms": sample.timestamp_ms,
                     }
                     print(json.dumps(payload, ensure_ascii=False), flush=True)
@@ -182,9 +308,17 @@ async def run(args: argparse.Namespace) -> None:
                         and prediction_count >= args.max_predictions
                     ):
                         break
-        finally:
             if report_started:
                 await sdk.stop_sensor_report(ring)
+                report_started = False
+    finally:
+        if report_started:
+            with suppress(Exception):
+                await sdk.stop_sensor_report(ring)
+        if telemetry_task is not None:
+            telemetry_task.cancel()
+            with suppress(asyncio.CancelledError):
+                await telemetry_task
 
 
 def main() -> None:

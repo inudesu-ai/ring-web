@@ -75,10 +75,14 @@ Run real-time inference on the laptop or edge computer connected to the ring:
 export RING_BRIDGE_TOKEN="same-token-as-the-API-server"
 
 python ml/realtime_infer.py \
-  --address YOUR_RING_ADDRESS \
+  --name ring \
   --model ml/models/gesture-mlp.npz \
   --publish-url https://api.inudesu.xyz/v1/gesture
 ```
+
+`--name ring` is recommended on macOS because CoreBluetooth UUIDs can rotate.
+The bridge now also publishes 10 Hz quaternion, Euler-angle, acceleration,
+gyroscope, and short-term relative-motion telemetry to `/v1/telemetry`.
 
 Full training and collection instructions are in [`ml/README.md`](ml/README.md).
 The completed one-million-row simulation and six-axis drift benchmark are
@@ -97,8 +101,13 @@ The server validates and broadcasts accepted predictions to browser viewers:
 
 ```text
 GET /v1/gesture/latest
+POST /v1/telemetry
+GET /v1/telemetry/latest
 WebSocket /ws
 ```
+
+The WebSocket drives the frontend's gesture probabilities, 3D ring pose,
+roll/pitch/yaw readout, six-axis plots, and recognition history.
 
 Create an API token on the EC2 instance:
 

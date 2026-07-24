@@ -1,112 +1,240 @@
 <!doctype html>
-<html lang="en">
+<html lang="zh-CN">
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>Ring Intelligence — inudesu</title>
+    <meta name="theme-color" content="#070908" />
+    <title>Ring Motion Console — INUDESU</title>
     <meta
       name="description"
-      content="Live Ring Sound gesture intelligence and model telemetry."
+      content="Ring Sound 六轴 IMU、手势识别与三维姿态实时控制台。"
     />
     <link rel="stylesheet" href="/style.css" />
     <script src="/app.js" defer></script>
   </head>
   <body>
-    <div class="ambient ambient-one"></div>
-    <div class="ambient ambient-two"></div>
+    <div class="noise" aria-hidden="true"></div>
+    <div class="ambient ambient-a" aria-hidden="true"></div>
+    <div class="ambient ambient-b" aria-hidden="true"></div>
 
-    <header class="site-header">
-      <a class="brand" href="/" aria-label="inudesu home">
-        <span class="brand-mark">犬</span>
-        <span>INUDESU / RING LAB</span>
+    <header class="topbar">
+      <a class="brand" href="/" aria-label="INUDESU Ring Motion Console">
+        <span class="brand-symbol">犬</span>
+        <span class="brand-copy">
+          <strong>INUDESU</strong>
+          <small>RING MOTION LAB</small>
+        </span>
       </a>
-      <div class="connection" id="connection">
-        <span class="connection-dot"></span>
-        <span id="connection-label">Connecting</span>
+
+      <div class="system-status">
+        <div class="status-unit">
+          <span class="status-dot" id="api-dot"></span>
+          <span>
+            <small>API</small>
+            <strong id="api-status">正在连接</strong>
+          </span>
+        </div>
+        <div class="status-unit">
+          <span class="status-dot muted" id="stream-dot"></span>
+          <span>
+            <small>RING STREAM</small>
+            <strong id="stream-status">等待数据</strong>
+          </span>
+        </div>
       </div>
     </header>
 
     <main>
-      <section class="hero">
-        <p class="eyebrow">Wearable intelligence, live</p>
-        <h1>Motion becomes<br /><em>meaning.</em></h1>
-        <p class="hero-copy">
-          Six-axis motion from the Ring Sound SDK, classified at the edge and
-          streamed to this dashboard in real time.
-        </p>
+      <section class="console-head">
+        <div>
+          <p class="kicker"><span>LIVE</span> / 六轴运动智能</p>
+          <h1>Ring Motion <em>Console</em></h1>
+          <p class="intro">
+            实时手势识别、三维相对运动与六轴姿态融合。重力约束 Roll/Pitch，
+            Yaw 为六轴相对航向。
+          </p>
+        </div>
+        <div class="console-actions">
+          <button class="action-button" id="zero-pose" type="button">
+            <span class="button-icon">◎</span>
+            姿态归零
+          </button>
+          <button class="action-button" id="demo-toggle" type="button">
+            <span class="button-icon">◌</span>
+            模拟信号
+          </button>
+        </div>
       </section>
 
-      <section class="dashboard" aria-label="Live gesture dashboard">
-        <article class="gesture-panel panel">
-          <div class="panel-heading">
+      <section class="dashboard-grid" aria-label="Ring 实时运动控制台">
+        <article class="panel motion-panel">
+          <header class="panel-head">
             <div>
-              <p class="panel-label">Current gesture</p>
-              <p class="timestamp" id="timestamp">Waiting for the ring bridge</p>
+              <p class="panel-index">01 / SPATIAL POSE</p>
+              <h2>三维姿态</h2>
             </div>
-            <span class="live-badge"><i></i> Live</span>
+            <div class="panel-flags">
+              <span id="sample-rate">— Hz</span>
+              <span class="flag" id="motion-state">NO DATA</span>
+            </div>
+          </header>
+
+          <div class="motion-stage">
+            <canvas
+              id="motion-canvas"
+              aria-label="戒指三维姿态与相对运动可视化"
+            ></canvas>
+            <div class="stage-reticle" aria-hidden="true">
+              <i></i><i></i><i></i><i></i>
+            </div>
+            <div class="axis-legend" aria-hidden="true">
+              <span class="axis-x">X</span>
+              <span class="axis-y">Y</span>
+              <span class="axis-z">Z</span>
+            </div>
+            <div class="gesture-overlay">
+              <span>当前手势 / GESTURE</span>
+              <strong id="gesture-name">等待戒指</strong>
+              <small id="gesture-detail">尚未收到识别结果</small>
+            </div>
           </div>
 
-          <div class="gesture-stage">
-            <div class="gesture-orbit" aria-hidden="true">
-              <span></span><span></span><span></span>
+          <div class="pose-strip" aria-label="欧拉角">
+            <div>
+              <span>ROLL / 横滚</span>
+              <strong id="roll-value">0.0°</strong>
+              <i><b id="roll-bar"></b></i>
             </div>
-            <p class="gesture-name" id="gesture-name">—</p>
-            <p class="raw-gesture" id="raw-gesture">No prediction yet</p>
+            <div>
+              <span>PITCH / 俯仰</span>
+              <strong id="pitch-value">0.0°</strong>
+              <i><b id="pitch-bar"></b></i>
+            </div>
+            <div>
+              <span>YAW / 相对航向</span>
+              <strong id="yaw-value">0.0°</strong>
+              <i><b id="yaw-bar"></b></i>
+            </div>
           </div>
+
+          <p class="motion-disclaimer">
+            画面中的位移是带阻尼的短时相对运动，不代表绝对空间定位。
+          </p>
         </article>
 
-        <article class="confidence-panel panel">
-          <p class="panel-label">Model confidence</p>
-          <div class="confidence-wrap">
-            <div class="confidence-ring" id="confidence-ring">
+        <aside class="side-stack">
+          <article class="panel recognition-panel">
+            <header class="panel-head compact">
               <div>
-                <strong id="confidence">0</strong>
-                <span>%</span>
+                <p class="panel-index">02 / RECOGNITION</p>
+                <h2>手势识别</h2>
+              </div>
+              <span class="live-chip"><i></i> LIVE</span>
+            </header>
+
+            <div class="confidence-block">
+              <div>
+                <span>置信度</span>
+                <strong><b id="confidence">0</b>%</strong>
+              </div>
+              <div class="confidence-track">
+                <i id="confidence-bar"></i>
               </div>
             </div>
-          </div>
-          <dl class="model-meta">
-            <div>
-              <dt>Model</dt>
-              <dd id="model-type">Not connected</dd>
+
+            <div class="probabilities" id="probabilities">
+              <p class="empty-state">等待第一组分类概率</p>
             </div>
-            <div>
-              <dt>Source</dt>
-              <dd id="source">—</dd>
+
+            <div class="model-line">
+              <span>MODEL</span>
+              <strong id="model-type">未连接</strong>
             </div>
-          </dl>
+          </article>
+
+          <article class="panel sensor-panel">
+            <header class="panel-head compact">
+              <div>
+                <p class="panel-index">03 / SIX-AXIS IMU</p>
+                <h2>传感器</h2>
+              </div>
+              <span class="sequence" id="sequence">SEQ —</span>
+            </header>
+
+            <div class="sensor-group">
+              <div class="sensor-title">
+                <span>ACCELEROMETER</span><small>g</small>
+              </div>
+              <div class="axis-values">
+                <div><span>X</span><strong id="accel-x">0.000</strong></div>
+                <div><span>Y</span><strong id="accel-y">0.000</strong></div>
+                <div><span>Z</span><strong id="accel-z">0.000</strong></div>
+              </div>
+            </div>
+
+            <div class="sensor-group">
+              <div class="sensor-title">
+                <span>GYROSCOPE</span><small>°/s</small>
+              </div>
+              <div class="axis-values gyro-values">
+                <div><span>X</span><strong id="gyro-x">0.00</strong></div>
+                <div><span>Y</span><strong id="gyro-y">0.00</strong></div>
+                <div><span>Z</span><strong id="gyro-z">0.00</strong></div>
+              </div>
+            </div>
+
+            <div class="quaternion-line">
+              <span>QUATERNION</span>
+              <code id="quaternion-value">1.000 0.000 0.000 0.000</code>
+            </div>
+          </article>
+        </aside>
+
+        <article class="panel signal-panel">
+          <header class="panel-head">
+            <div>
+              <p class="panel-index">04 / SIGNAL HISTORY</p>
+              <h2>六轴波形</h2>
+            </div>
+            <div class="chart-legend" aria-hidden="true">
+              <span class="legend-x">X</span>
+              <span class="legend-y">Y</span>
+              <span class="legend-z">Z</span>
+              <span class="window" id="signal-window">最近 0.0s</span>
+            </div>
+          </header>
+          <canvas id="signal-canvas" aria-label="六轴 IMU 实时波形"></canvas>
         </article>
 
-        <article class="probability-panel panel">
-          <div class="panel-heading">
-            <p class="panel-label">Class probabilities</p>
-            <span class="window-label">1.6s window</span>
-          </div>
-          <div class="probabilities" id="probabilities">
-            <p class="empty-state">Probabilities will appear after the first inference.</p>
-          </div>
+        <article class="panel events-panel">
+          <header class="panel-head">
+            <div>
+              <p class="panel-index">05 / EVENT LOG</p>
+              <h2>识别记录</h2>
+            </div>
+            <span class="event-count" id="event-count">00</span>
+          </header>
+          <ol class="event-list" id="event-list">
+            <li class="empty-event">暂无手势事件</li>
+          </ol>
         </article>
-      </section>
-
-      <section class="pipeline">
-        <p class="eyebrow">Signal path</p>
-        <div class="pipeline-grid">
-          <div><span>01</span><strong>Ring</strong><small>BLE / six-axis IMU</small></div>
-          <i>→</i>
-          <div><span>02</span><strong>Edge</strong><small>HMM or small MLP</small></div>
-          <i>→</i>
-          <div><span>03</span><strong>API</strong><small>Authenticated publish</small></div>
-          <i>→</i>
-          <div><span>04</span><strong>Web</strong><small>WebSocket telemetry</small></div>
-        </div>
       </section>
     </main>
 
     <footer>
-      <span>INUDESU AI · 2026</span>
+      <span>INUDESU AI / RING SOUND SDK 0.4.1</span>
+      <span id="last-update">WAITING FOR TELEMETRY</span>
       <nav>
-        <a href="https://github.com/inudesu-ai/ring-web" target="_blank" rel="noreferrer">Source</a>
-        <a href="https://api.inudesu.xyz/health" target="_blank" rel="noreferrer">API status</a>
+        <a
+          href="https://github.com/inudesu-ai/ring-web"
+          target="_blank"
+          rel="noreferrer"
+        >SOURCE</a>
+        <a
+          href="https://api.inudesu.xyz/health"
+          target="_blank"
+          rel="noreferrer"
+        >API</a>
       </nav>
     </footer>
   </body>

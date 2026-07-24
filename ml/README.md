@@ -69,13 +69,15 @@ deployed model.
 export RING_BRIDGE_TOKEN="replace-with-the-server-token"
 
 python ml/realtime_infer.py \
-  --address YOUR_RING_ADDRESS \
+  --name ring \
   --model ml/models/gesture-mlp.npz \
   --publish-url https://api.inudesu.xyz/v1/gesture
 ```
 
 AWS runs the Web/API, while this process runs on the laptop or edge computer
-near the ring because that machine owns the BLE connection.
+near the ring because that machine owns the BLE connection. The telemetry URL
+is derived automatically as `https://api.inudesu.xyz/v1/telemetry`; use
+`--telemetry-hz` to change its default 10 Hz publish rate.
 
 ## Synthetic smoke test
 

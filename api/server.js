@@ -20,6 +20,33 @@ function cleanText(value, maximumLength) {
   return typeof value === 'string' ? value.trim().slice(0, maximumLength) : '';
 }
 
+function cleanNumber(value, maximumAbsolute) {
+  const number = Number(value);
+  return Number.isFinite(number) && Math.abs(number) <= maximumAbsolute
+    ? number
+    : null;
+}
+
+function normalizeVector(value, axes, maximumAbsolute) {
+  if (!value || typeof value !== 'object') return null;
+  const vector = {};
+  for (const axis of axes) {
+    const number = cleanNumber(value[axis], maximumAbsolute);
+    if (number === null) return null;
+    vector[axis] = number;
+  }
+  return vector;
+}
+
+function producerAuthorized(request, bridgeToken) {
+  if (!bridgeToken) return true;
+  const authorization = request.get('authorization') || '';
+  const supplied = authorization.startsWith('Bearer ')
+    ? authorization.slice('Bearer '.length)
+    : '';
+  return Boolean(supplied && safeTokenEquals(bridgeToken, supplied));
+}
+
 function normalizeGesture(body) {
   const gesture = cleanText(body?.gesture, 64);
   const rawGesture = cleanText(body?.raw_gesture, 64) || gesture;
@@ -56,11 +83,66 @@ function normalizeGesture(body) {
   };
 }
 
+function normalizeTelemetry(body) {
+  const quaternion = normalizeVector(body?.quaternion, ['w', 'x', 'y', 'z'], 1.1);
+  const euler = normalizeVector(body?.euler_deg, ['roll', 'pitch', 'yaw'], 10000);
+  const accel = normalizeVector(body?.accel_g, ['x', 'y', 'z'], 64);
+  const gyro = normalizeVector(body?.gyro_dps, ['x', 'y', 'z'], 10000);
+  const linearAccel = normalizeVector(body?.linear_accel_g, ['x', 'y', 'z'], 64);
+  if (!quaternion || !euler || !accel || !gyro || !linearAccel) return null;
+
+  const quaternionNorm = Math.hypot(
+    quaternion.w,
+    quaternion.x,
+    quaternion.y,
+    quaternion.z,
+  );
+  const sampleRate = Number(body?.sample_rate_hz);
+  if (
+    quaternionNorm < 0.5 ||
+    !Number.isFinite(sampleRate) ||
+    sampleRate <= 0 ||
+    sampleRate > 2000
+  ) {
+    return null;
+  }
+  for (const axis of ['w', 'x', 'y', 'z']) {
+    quaternion[axis] /= quaternionNorm;
+  }
+
+  return {
+    type: 'telemetry',
+    event_id: randomUUID(),
+    quaternion,
+    euler_deg: euler,
+    accel_g: accel,
+    gyro_dps: gyro,
+    linear_accel_g: linearAccel,
+    gyro_bias_dps:
+      normalizeVector(body?.gyro_bias_dps, ['x', 'y', 'z'], 1000) ?? {
+        x: 0,
+        y: 0,
+        z: 0,
+      },
+    stationary: body?.stationary === true,
+    sample_rate_hz: sampleRate,
+    sequence: Number.isFinite(Number(body?.sequence))
+      ? Math.max(0, Math.trunc(Number(body.sequence)))
+      : null,
+    device_timestamp_ms: Number.isFinite(Number(body?.device_timestamp_ms))
+      ? Number(body.device_timestamp_ms)
+      : null,
+    source: cleanText(body?.source, 128) || 'ring-bridge',
+    received_at: new Date().toISOString(),
+  };
+}
+
 export function createRingServer({ bridgeToken = process.env.RING_BRIDGE_TOKEN || '' } = {}) {
   const app = express();
   const server = http.createServer(app);
   const webSocketServer = new WebSocketServer({ server, path: '/ws' });
   let latestGesture = null;
+  let latestTelemetry = null;
 
   app.use(helmet());
   app.use(cors());
@@ -72,6 +154,7 @@ export function createRingServer({ bridgeToken = process.env.RING_BRIDGE_TOKEN |
       service: 'ring-api',
       viewers: webSocketServer.clients.size,
       latest_gesture_at: latestGesture?.received_at ?? null,
+      latest_telemetry_at: latestTelemetry?.received_at ?? null,
       time: new Date().toISOString(),
     });
   });
@@ -89,14 +172,8 @@ export function createRingServer({ bridgeToken = process.env.RING_BRIDGE_TOKEN |
   });
 
   app.post('/v1/gesture', (req, res) => {
-    if (bridgeToken) {
-      const authorization = req.get('authorization') || '';
-      const supplied = authorization.startsWith('Bearer ')
-        ? authorization.slice('Bearer '.length)
-        : '';
-      if (!supplied || !safeTokenEquals(bridgeToken, supplied)) {
-        return res.status(401).json({ ok: false, error: 'invalid producer token' });
-      }
+    if (!producerAuthorized(req, bridgeToken)) {
+      return res.status(401).json({ ok: false, error: 'invalid producer token' });
     }
 
     const event = normalizeGesture(req.body);
@@ -107,6 +184,32 @@ export function createRingServer({ bridgeToken = process.env.RING_BRIDGE_TOKEN |
       });
     }
     latestGesture = event;
+    const message = JSON.stringify(event);
+    for (const client of webSocketServer.clients) {
+      if (client.readyState === WebSocket.OPEN) {
+        client.send(message);
+      }
+    }
+    return res.status(202).json({ ok: true, event_id: event.event_id });
+  });
+
+  app.get('/v1/telemetry/latest', (_req, res) => {
+    res.json({ ok: true, event: latestTelemetry });
+  });
+
+  app.post('/v1/telemetry', (req, res) => {
+    if (!producerAuthorized(req, bridgeToken)) {
+      return res.status(401).json({ ok: false, error: 'invalid producer token' });
+    }
+
+    const event = normalizeTelemetry(req.body);
+    if (!event) {
+      return res.status(400).json({
+        ok: false,
+        error: 'valid quaternion, euler, acceleration, gyro and sample rate are required',
+      });
+    }
+    latestTelemetry = event;
     const message = JSON.stringify(event);
     for (const client of webSocketServer.clients) {
       if (client.readyState === WebSocket.OPEN) {
@@ -130,6 +233,9 @@ export function createRingServer({ bridgeToken = process.env.RING_BRIDGE_TOKEN |
     );
     if (latestGesture) {
       socket.send(JSON.stringify(latestGesture));
+    }
+    if (latestTelemetry) {
+      socket.send(JSON.stringify(latestTelemetry));
     }
   });
 

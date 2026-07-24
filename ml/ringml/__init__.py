@@ -14,10 +14,12 @@ from .data import (
 )
 from .hmm import GaussianHMMClassifier
 from .mlp import MLPClassifier
+from .orientation import SixAxisAhrs
 
 __all__ = [
     "GaussianHMMClassifier",
     "MLPClassifier",
+    "SixAxisAhrs",
     "Session",
     "WindowDataset",
     "classification_scores",

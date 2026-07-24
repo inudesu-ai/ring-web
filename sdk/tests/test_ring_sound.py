@@ -16,6 +16,7 @@ class ProtocolTests(unittest.TestCase):
     def test_imported_version_and_transport_defaults(self) -> None:
         self.assertEqual(sdk.__version__, "0.4.1")
         self.assertEqual(sdk.DEFAULT_SCAN_TIMEOUT_S, 25.0)
+        self.assertEqual(sdk.NusClient(name="ring").name, "ring")
 
     def test_packet_round_trip_and_fragmented_stream(self) -> None:
         first = sdk.encode_packet(0x0605, b"sensor-data")

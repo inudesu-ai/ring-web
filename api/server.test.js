@@ -67,4 +67,38 @@ test('authenticated gesture events are broadcast and retained', async (context) 
   const latest = await latestResponse.json();
   assert.equal(latest.ok, true);
   assert.equal(latest.event.event_id, event.event_id);
+
+  const telemetryBroadcast = nextJson(socket);
+  const telemetryResponse = await fetch(`${baseUrl}/v1/telemetry`, {
+    method: 'POST',
+    headers: {
+      authorization: 'Bearer test-secret',
+      'content-type': 'application/json',
+    },
+    body: JSON.stringify({
+      quaternion: { w: 1, x: 0, y: 0, z: 0 },
+      euler_deg: { roll: 2.1, pitch: -3.2, yaw: 8.4 },
+      accel_g: { x: 0.01, y: -0.02, z: 1.01 },
+      gyro_dps: { x: 1.2, y: -0.8, z: 2.4 },
+      linear_accel_g: { x: 0.01, y: -0.02, z: 0.01 },
+      gyro_bias_dps: { x: 0.1, y: -0.1, z: 0.2 },
+      stationary: false,
+      sample_rate_hz: 100,
+      sequence: 42,
+      device_timestamp_ms: 1234,
+      source: 'test-ring',
+    }),
+  });
+  assert.equal(telemetryResponse.status, 202);
+
+  const telemetry = await telemetryBroadcast;
+  assert.equal(telemetry.type, 'telemetry');
+  assert.equal(telemetry.sample_rate_hz, 100);
+  assert.equal(telemetry.sequence, 42);
+  assert.deepEqual(telemetry.euler_deg, { roll: 2.1, pitch: -3.2, yaw: 8.4 });
+
+  const latestTelemetryResponse = await fetch(`${baseUrl}/v1/telemetry/latest`);
+  const latestTelemetry = await latestTelemetryResponse.json();
+  assert.equal(latestTelemetry.ok, true);
+  assert.equal(latestTelemetry.event.event_id, telemetry.event_id);
 });
