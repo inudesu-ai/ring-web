@@ -29,7 +29,6 @@ from ringml.direction import (  # noqa: E402
     DirectionDecision,
     DirectionalGestureRecognizer,
     blend_direction_probabilities,
-    blend_stationary_probabilities,
     swap_vertical_probabilities,
 )
 from ringml.displacement import DisplacementTracker  # noqa: E402
@@ -451,18 +450,6 @@ async def run(args: argparse.Namespace) -> None:
                         smoothed,
                         direction_decision,
                     )
-                    if (
-                        recognition_source == "mlp"
-                        and ahrs.stationary
-                        and motion.armed
-                        and not motion.moving
-                        and not motion.translation_candidate
-                    ):
-                        fused, recognition_source = blend_stationary_probabilities(
-                            model.classes,
-                            fused,
-                            ahrs.stationary_confidence,
-                        )
                     best_index = int(np.argmax(fused))
                     confidence = float(fused[best_index])
                     raw_gesture = str(model.classes[best_index])

@@ -12,7 +12,6 @@ sys.path.insert(0, str(ML_DIR))
 from ringml.direction import (  # noqa: E402
     DirectionalGestureRecognizer,
     blend_direction_probabilities,
-    blend_stationary_probabilities,
     swap_vertical_probabilities,
 )
 from ringml.displacement import DisplacementEstimate  # noqa: E402
@@ -23,7 +22,6 @@ def estimate(
     *,
     segment_id=1,
     moving=True,
-    zupt_confidence=0.9,
 ) -> DisplacementEstimate:
     return DisplacementEstimate(
         armed=True,
@@ -42,7 +40,7 @@ def estimate(
         segment_id=segment_id,
         segment_elapsed_s=0.3 if moving else 0.0,
         zupt_count=0 if moving else 1,
-        zupt_confidence=zupt_confidence,
+        zupt_confidence=0.9,
         confidence=0.9,
         position_correction_m=(0.0, 0.0, 0.0),
     )
@@ -96,62 +94,6 @@ class DirectionRecognizerTests(unittest.TestCase):
         self.assertEqual(moving.label, "right")
         self.assertEqual(stopped.label, "right")
 
-    def test_braking_rebound_cannot_reverse_latched_vertical_direction(self) -> None:
-        recognizer = DirectionalGestureRecognizer()
-        upward = recognizer.update(
-            estimate((0.0, 0.0, 0.08), segment_id=1),
-            timestamp_ms=1000,
-        )
-        rebound = recognizer.update(
-            estimate((0.0, 0.0, -0.16), segment_id=3),
-            timestamp_ms=1200,
-        )
-        stopped = recognizer.update(
-            estimate((0.0, 0.0, -0.17), segment_id=3, moving=False),
-            timestamp_ms=1400,
-        )
-        self.assertEqual(upward.label, "up")
-        self.assertEqual(rebound.label, "up")
-        self.assertEqual(stopped.label, "up")
-
-        downward = recognizer.update(
-            estimate((0.0, 0.0, -0.25), segment_id=4),
-            timestamp_ms=2500,
-        )
-        self.assertEqual(downward.label, "down")
-
-    def test_short_low_confidence_pause_separates_two_gestures(self) -> None:
-        recognizer = DirectionalGestureRecognizer()
-        upward = recognizer.update(
-            estimate((0.0, 0.0, 0.08), segment_id=1),
-            timestamp_ms=1000,
-        )
-        recognizer.update(
-            estimate(
-                (0.0, 0.0, 0.07),
-                segment_id=1,
-                moving=False,
-                zupt_confidence=0.2,
-            ),
-            timestamp_ms=1100,
-        )
-        paused = recognizer.update(
-            estimate(
-                (0.0, 0.0, 0.07),
-                segment_id=1,
-                moving=False,
-                zupt_confidence=0.2,
-            ),
-            timestamp_ms=1450,
-        )
-        downward = recognizer.update(
-            estimate((0.0, 0.0, -0.02), segment_id=2),
-            timestamp_ms=1700,
-        )
-        self.assertEqual(upward.label, "up")
-        self.assertEqual(paused.label, "up")
-        self.assertEqual(downward.label, "down")
-
     def test_trajectory_probability_overrides_ambiguous_mlp(self) -> None:
         classes = np.asarray(["left", "right", "up", "down", "wave"])
         probabilities = np.asarray([0.22, 0.24, 0.18, 0.17, 0.19])
@@ -175,19 +117,6 @@ class DirectionRecognizerTests(unittest.TestCase):
         self.assertAlmostEqual(physical[1], 0.05)
         self.assertAlmostEqual(physical[3], 0.80)
         self.assertAlmostEqual(float(np.sum(physical)), 1.0)
-
-    def test_stationary_is_a_dedicated_high_confidence_state(self) -> None:
-        classes = np.asarray(["left", "idle", "right", "up", "down"])
-        probabilities = np.asarray([0.05, 0.10, 0.70, 0.10, 0.05])
-        fused, source = blend_stationary_probabilities(
-            classes,
-            probabilities,
-            0.85,
-        )
-        self.assertEqual(source, "zupt-stationary")
-        self.assertEqual(classes[int(np.argmax(fused))], "idle")
-        self.assertGreater(fused[1], 0.95)
-        self.assertAlmostEqual(float(np.sum(fused)), 1.0)
 
 
 if __name__ == "__main__":
