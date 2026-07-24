@@ -55,6 +55,16 @@ test('authenticated gesture events are broadcast and retained', async (context) 
       probabilities: { wave: 0.93, idle: 0.07 },
       model_type: 'ring-mlp-v1',
       recognition_source: 'mlp',
+      circle_metrics: {
+        label: 'circle',
+        confidence: 0.9,
+        path_length_m: 0.52,
+        radius_m: 0.08,
+        turn_radians: 6.1,
+        closure_ratio: 0.12,
+        plane_score: 0.96,
+        roundness: 0.82,
+      },
     }),
   });
   assert.equal(accepted.status, 202);
@@ -64,6 +74,8 @@ test('authenticated gesture events are broadcast and retained', async (context) 
   assert.equal(event.gesture, 'wave');
   assert.equal(event.confidence, 0.93);
   assert.equal(event.recognition_source, 'mlp');
+  assert.equal(event.circle_metrics.turn_radians, 6.1);
+  assert.equal(event.circle_metrics.roundness, 0.82);
 
   const latestResponse = await fetch(`${baseUrl}/v1/gesture/latest`);
   const latest = await latestResponse.json();

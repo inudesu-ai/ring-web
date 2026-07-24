@@ -14,6 +14,8 @@ from .data import (
 )
 from .hmm import GaussianHMMClassifier
 from .mlp import MLPClassifier
+from .circle import CircleGestureRecognizer
+from .depth import DepthGestureRecognizer
 from .direction import DirectionalGestureRecognizer
 from .displacement import DisplacementTracker
 from .orientation import SixAxisAhrs
@@ -21,6 +23,8 @@ from .orientation import SixAxisAhrs
 __all__ = [
     "GaussianHMMClassifier",
     "MLPClassifier",
+    "CircleGestureRecognizer",
+    "DepthGestureRecognizer",
     "DirectionalGestureRecognizer",
     "DisplacementTracker",
     "SixAxisAhrs",

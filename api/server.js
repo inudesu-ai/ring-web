@@ -98,6 +98,29 @@ function producerAuthorized(request, bridgeToken) {
   return Boolean(supplied && safeTokenEquals(bridgeToken, supplied));
 }
 
+function normalizeCircleMetrics(value) {
+  if (!value || typeof value !== 'object') return null;
+  const pathLength = cleanNumber(value.path_length_m, 10000);
+  const radius = cleanNumber(value.radius_m, 1000);
+  const turn = cleanNumber(value.turn_radians, 100);
+  const closure = cleanNumber(value.closure_ratio, 100);
+  const plane = cleanNumber(value.plane_score, 1);
+  const roundness = cleanNumber(value.roundness, 1);
+  if ([pathLength, radius, turn, closure, plane, roundness].includes(null)) {
+    return null;
+  }
+  return {
+    label: cleanText(value.label, 32) || 'circle',
+    confidence: Math.min(1, Math.max(0, Number(value.confidence) || 0)),
+    path_length_m: Math.max(0, pathLength),
+    radius_m: Math.max(0, radius),
+    turn_radians: Math.max(0, turn),
+    closure_ratio: Math.max(0, closure),
+    plane_score: Math.min(1, Math.max(0, plane)),
+    roundness: Math.min(1, Math.max(0, roundness)),
+  };
+}
+
 function normalizeGesture(body) {
   const gesture = cleanText(body?.gesture, 64);
   const rawGesture = cleanText(body?.raw_gesture, 64) || gesture;
@@ -129,6 +152,7 @@ function normalizeGesture(body) {
     recognition_source: cleanText(body.recognition_source, 64) || 'mlp',
     direction_displacement_m:
       normalizeVector(body?.direction_displacement_m, ['x', 'y', 'z'], 1000),
+    circle_metrics: normalizeCircleMetrics(body?.circle_metrics),
     source: cleanText(body.source, 128) || 'ring-bridge',
     device_timestamp_ms: Number.isFinite(Number(body.device_timestamp_ms))
       ? Number(body.device_timestamp_ms)

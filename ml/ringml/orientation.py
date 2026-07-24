@@ -205,11 +205,19 @@ class SixAxisAhrs:
         self.stationary = bool(
             stable_signal
             and instant_quiet
-            and np.linalg.norm(corrected_mean) <= 3.5
             and self.stationary_confidence >= 0.62
         )
 
         if self.stationary and self.calibrated:
+            bias_step = float(np.linalg.norm(window_bias - self.gyro_bias_dps))
+            if bias_step >= 3.0:
+                # Firmware sensor sessions can change their gyro DC offset.
+                # A full quiet window proves this is a new zero rather than
+                # motion, so re-anchor the bias and gravity tilt immediately.
+                self.gyro_bias_dps = window_bias.copy()
+                self._initialize_from_accel(accel_center)
+                self.gravity_integral.fill(0.0)
+                return
             # Track warm-up drift slowly, but only after a fused rest decision.
             # Use one sample's dt here; using the whole window duration on
             # every sample would make the bias adaptation unintentionally fast.

@@ -12,6 +12,7 @@ sys.path.insert(0, str(ML_DIR))
 from ringml.direction import (  # noqa: E402
     DirectionalGestureRecognizer,
     blend_direction_probabilities,
+    blend_stationary_probabilities,
     swap_vertical_probabilities,
 )
 from ringml.displacement import DisplacementEstimate  # noqa: E402
@@ -117,6 +118,19 @@ class DirectionRecognizerTests(unittest.TestCase):
         self.assertAlmostEqual(physical[1], 0.05)
         self.assertAlmostEqual(physical[3], 0.80)
         self.assertAlmostEqual(float(np.sum(physical)), 1.0)
+
+    def test_stationary_overrides_model_with_idle(self) -> None:
+        classes = np.asarray(["circle", "idle", "left", "right"])
+        model = np.asarray([0.1, 0.1, 0.4, 0.4])
+        fused, source = blend_stationary_probabilities(
+            classes,
+            model,
+            0.85,
+        )
+        self.assertEqual(source, "zupt-stationary")
+        self.assertEqual(classes[int(np.argmax(fused))], "idle")
+        self.assertGreater(fused[1], 0.95)
+        self.assertAlmostEqual(float(np.sum(fused)), 1.0)
 
 
 if __name__ == "__main__":

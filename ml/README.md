@@ -87,6 +87,16 @@ with the model probabilities for `left/right/up/down`. The event field
 `recognition_source` is `zupt-direction` when this physical override is used
 and `mlp` otherwise.
 
+`CircleGestureRecognizer` projects the live 3-D path onto its PCA best-fit
+plane and requires coherent angular sweep, loop closure, roundness, radial
+consistency, and planar energy. Verified loops use `zupt-circle`. Confirmed
+low-fluctuation rest windows use `zupt-stationary` and publish the dedicated
+`idle` state.
+
+`DepthGestureRecognizer` adds physical-only `forward/backward` classes when
+the relative world-Y trajectory dominates both lateral and vertical motion;
+these classes do not replace the MLP's `rotate_front/rotate_back` gestures.
+
 The simulated million-row model is still only a baseline for non-directional
 gestures. Its periodic random-phase directional templates make opposite
 directions intrinsically ambiguous in some windows; the trajectory fusion

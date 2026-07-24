@@ -102,6 +102,16 @@ dominant displacement axis to correct ambiguous `left/right/up/down` MLP
 outputs. Up/down is gravity-referenced; horizontal heading remains relative
 because the ring is a six-axis device without a magnetometer.
 
+The physical recognizer also exposes two first-class states:
+
+- `zupt-stationary` forces `idle` only after a calibrated, low-fluctuation
+  rest window;
+- `zupt-circle` verifies a loop using best-fit-plane PCA, angular sweep,
+  closure, roundness, radial consistency, and planar energy before overriding
+  the MLP. Circle geometry is included in `gesture.circle_metrics`.
+- `zupt-depth` adds physical-only `forward/backward` translation when the
+  world-Y displacement clearly dominates lateral and vertical movement.
+
 This trajectory is intended for short `rest → move → rest` gestures. General
 long-duration IMU-only position tracking remains unobservable without an
 external position or velocity reference.

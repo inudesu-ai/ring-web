@@ -33,6 +33,33 @@ def swap_vertical_probabilities(
     return values
 
 
+def blend_stationary_probabilities(
+    classes: np.ndarray,
+    probabilities: np.ndarray,
+    stationary_confidence: float,
+) -> tuple[np.ndarray, str]:
+    """Expose confirmed low-fluctuation rest as an explicit idle state."""
+
+    labels = np.asarray(classes, dtype=str)
+    values = np.asarray(probabilities, dtype=np.float64).copy()
+    idle = np.flatnonzero(labels == "idle")
+    if not len(idle):
+        return values, "mlp"
+    target = int(idle[0])
+    confidence = min(0.995, max(0.90, 0.86 + 0.13 * stationary_confidence))
+    other_sum = float(np.sum(values) - values[target])
+    if other_sum <= 1e-12:
+        values.fill((1.0 - confidence) / max(1, len(values) - 1))
+    else:
+        scale = (1.0 - confidence) / other_sum
+        for index in range(len(values)):
+            if index != target:
+                values[index] *= scale
+    values[target] = confidence
+    values /= np.sum(values)
+    return values, "zupt-stationary"
+
+
 @dataclass(frozen=True)
 class DirectionDecision:
     label: str

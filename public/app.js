@@ -50,6 +50,8 @@ const gestureNames = {
   right: '向右',
   up: '向上',
   down: '向下',
+  forward: '向前',
+  backward: '向后',
   circle: '画圆',
   double_tap: '双击',
   uncertain: '不确定',
@@ -255,9 +257,12 @@ function renderGesture(event) {
   state.lastGestureAt = at;
 
   elements.gesture.textContent = readableGesture(event.gesture);
-  const recognitionSource = event.recognition_source === 'zupt-direction'
-    ? 'ZUPT 轨迹方向'
-    : 'MLP';
+  const recognitionSource = {
+    'zupt-direction': 'ZUPT 轨迹方向',
+    'zupt-depth': 'ZUPT 前后方向',
+    'zupt-circle': '3D 轨迹圆形',
+    'zupt-stationary': 'ZUPT 静止状态',
+  }[event.recognition_source] || 'MLP';
   elements.gestureDetail.textContent = event.gesture === event.raw_gesture
     ? `${recognitionSource} / 识别通过`
     : `候选：${readableGesture(event.raw_gesture)} / 低于阈值`;
@@ -336,7 +341,7 @@ function renderTelemetry(event) {
     else if (motion.moving === true) motionLabel = 'TRANSLATING';
     else if (motion.rotating_only === true) motionLabel = 'ROTATION ONLY';
     else if (motion.translation_candidate === true) motionLabel = 'CONFIRMING';
-    else if (state.stationary) motionLabel = 'ZUPT LOCKED';
+    else if (state.stationary) motionLabel = 'STATIONARY';
     else motionLabel = 'READY';
     elements.motionState.textContent = motionLabel;
     elements.motionState.classList.toggle(

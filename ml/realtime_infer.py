@@ -24,11 +24,22 @@ sys.path.insert(0, str(PROJECT_DIR / "sdk"))
 
 import ring_sound as sdk  # noqa: E402
 
+from ringml.circle import (  # noqa: E402
+    CircleDecision,
+    CircleGestureRecognizer,
+    blend_circle_probabilities,
+)
 from ringml.data import resample_window  # noqa: E402
+from ringml.depth import (  # noqa: E402
+    DepthDecision,
+    DepthGestureRecognizer,
+    augment_depth_probabilities,
+)
 from ringml.direction import (  # noqa: E402
     DirectionDecision,
     DirectionalGestureRecognizer,
     blend_direction_probabilities,
+    blend_stationary_probabilities,
     swap_vertical_probabilities,
 )
 from ringml.displacement import DisplacementTracker  # noqa: E402
@@ -269,6 +280,10 @@ async def run(args: argparse.Namespace) -> None:
     displacement: DisplacementTracker | None = None
     direction = DirectionalGestureRecognizer()
     direction_decision: DirectionDecision | None = None
+    circle = CircleGestureRecognizer()
+    circle_decision: CircleDecision | None = None
+    depth = DepthGestureRecognizer()
+    depth_decision: DepthDecision | None = None
 
     print(
         f"Loaded {model.model_type}: {', '.join(model.classes.tolist())}; "
@@ -327,6 +342,8 @@ async def run(args: argparse.Namespace) -> None:
                 ):
                     displacement.handle_transport_gap()
                     direction.reset()
+                    circle.reset()
+                    depth.reset()
                     raw_window.clear()
                     samples_since_prediction = 0
                     last_timestamp_ms = None
@@ -376,6 +393,14 @@ async def run(args: argparse.Namespace) -> None:
                         stationary_confidence=ahrs.stationary_confidence,
                     )
                     direction_decision = direction.update(
+                        motion,
+                        timestamp_ms=sample.timestamp_ms,
+                    )
+                    circle_decision = circle.update(
+                        motion,
+                        timestamp_ms=sample.timestamp_ms,
+                    )
+                    depth_decision = depth.update(
                         motion,
                         timestamp_ms=sample.timestamp_ms,
                     )
@@ -450,19 +475,65 @@ async def run(args: argparse.Namespace) -> None:
                         smoothed,
                         direction_decision,
                     )
-                    best_index = int(np.argmax(fused))
-                    confidence = float(fused[best_index])
-                    raw_gesture = str(model.classes[best_index])
+                    circle_fused, circle_source = blend_circle_probabilities(
+                        model.classes,
+                        fused,
+                        circle_decision,
+                    )
+                    if circle_source == "zupt-circle":
+                        fused = circle_fused
+                        recognition_source = circle_source
+                    elif (
+                        recognition_source == "mlp"
+                        and ahrs.stationary
+                        and motion.armed
+                        and not motion.moving
+                        and not motion.translation_candidate
+                    ):
+                        fused, recognition_source = blend_stationary_probabilities(
+                            model.classes,
+                            fused,
+                            ahrs.stationary_confidence,
+                        )
+                    probability_payload = {
+                        str(label): float(value)
+                        for label, value in zip(model.classes, fused)
+                    }
+                    if (
+                        recognition_source != "zupt-circle"
+                        and depth_decision is not None
+                    ):
+                        probability_payload = augment_depth_probabilities(
+                            model.classes,
+                            fused,
+                            depth_decision,
+                        )
+                        recognition_source = "zupt-depth"
+                        raw_gesture = depth_decision.label
+                        confidence = probability_payload[raw_gesture]
+                    else:
+                        best_index = int(np.argmax(fused))
+                        confidence = float(fused[best_index])
+                        raw_gesture = str(model.classes[best_index])
                     gesture = raw_gesture if confidence >= threshold else "uncertain"
+                    displacement_decision = (
+                        direction_decision
+                        if recognition_source == "zupt-direction"
+                        else (
+                            depth_decision
+                            if recognition_source == "zupt-depth"
+                            else None
+                        )
+                    )
                     payload = {
                         "gesture": gesture,
                         "raw_gesture": raw_gesture,
                         "confidence": confidence,
-                        "probabilities": {
-                            str(label): float(value)
-                            for label, value in zip(model.classes, fused)
-                        },
-                        "model_type": f"{model.model_type}+zupt-direction-v1",
+                        "probabilities": probability_payload,
+                        "model_type": (
+                            f"{model.model_type}+zupt-direction-v1"
+                            "+circle-geometry-v1+depth-v1"
+                        ),
                         "model_file": args.model.name,
                         "recognition_source": recognition_source,
                         "direction_displacement_m": (
@@ -470,11 +541,16 @@ async def run(args: argparse.Namespace) -> None:
                                 axis: float(value)
                                 for axis, value in zip(
                                     "xyz",
-                                    direction_decision.displacement_m,
+                                    displacement_decision.displacement_m,
                                 )
                             }
-                            if recognition_source == "zupt-direction"
-                            and direction_decision is not None
+                            if displacement_decision is not None
+                            else None
+                        ),
+                        "circle_metrics": (
+                            circle_decision.as_payload()
+                            if recognition_source == "zupt-circle"
+                            and circle_decision is not None
                             else None
                         ),
                         "source": source,
