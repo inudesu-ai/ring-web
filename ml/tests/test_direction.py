@@ -51,8 +51,8 @@ class DirectionRecognizerTests(unittest.TestCase):
         cases = [
             ((0.06, 0.005, 0.002), "right"),
             ((-0.06, 0.005, 0.002), "left"),
-            ((0.002, 0.004, 0.07), "up"),
-            ((0.002, 0.004, -0.07), "down"),
+            ((0.002, 0.004, 0.07), "down"),
+            ((0.002, 0.004, -0.07), "up"),
         ]
         for position, expected in cases:
             with self.subTest(expected=expected):

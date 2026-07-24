@@ -88,7 +88,9 @@ class DirectionalGestureRecognizer:
         label: str | None = None
         dominant = 0.0
         if abs(dz) >= horizontal * 1.12:
-            label = "up" if dz > 0 else "down"
+            # The physical ring's integrated vertical axis is opposite to the
+            # simulator convention: positive dz is down, negative dz is up.
+            label = "down" if dz > 0 else "up"
             dominant = abs(dz) / max(distance, 1e-9)
         elif horizontal >= abs(dz) * 1.22:
             horizontal_axis = dx if abs(dx) >= abs(dy) else dy
