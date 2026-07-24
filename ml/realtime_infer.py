@@ -56,6 +56,11 @@ def build_parser() -> argparse.ArgumentParser:
         "--name",
         help="Advertised BLE name, e.g. ring; recommended on macOS.",
     )
+    target.add_argument(
+        "--any-nus",
+        action="store_true",
+        help="Connect to any nearby device advertising Nordic UART Service.",
+    )
     parser.add_argument(
         "--cpuid",
         default=None,
@@ -304,7 +309,9 @@ async def run(args: argparse.Namespace) -> None:
 
     try:
         async with sdk.RingSoundClient(
-            address=args.address, name=args.name
+            address=args.address,
+            name=args.name,
+            any_nus=args.any_nus,
         ) as ring:
             info = await sdk.get_system_info(ring)
             print(

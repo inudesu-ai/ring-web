@@ -15,6 +15,8 @@ RING_NAME="${RING_NAME:-ring}"
 TARGET_ARGS=(--name "$RING_NAME")
 if [[ -n "${RING_ADDRESS:-}" ]]; then
   TARGET_ARGS=(--address "$RING_ADDRESS")
+elif [[ "${RING_ANY_NUS:-0}" == "1" || "${RING_ANY_NUS:-false}" == "true" ]]; then
+  TARGET_ARGS=(--any-nus)
 fi
 CPUID_ARGS=()
 if [[ -n "${RING_CPUID:-}" ]]; then

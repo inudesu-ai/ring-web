@@ -553,6 +553,7 @@ class NusClient:
         *,
         address: str | None = None,
         name: str | None = None,
+        any_nus: bool = False,
         service_uuid: str = NUS_SERVICE_UUID,
         tx_uuid: str = NUS_TX_UUID,
         rx_uuid: str = NUS_RX_UUID,
@@ -562,6 +563,7 @@ class NusClient:
     ) -> None:
         self.address = address
         self.name = str(name or "").strip() or None
+        self.any_nus = bool(any_nus)
         self.service_uuid = service_uuid
         self.tx_uuid = tx_uuid
         self.rx_uuid = rx_uuid
@@ -619,10 +621,23 @@ class NusClient:
         except ImportError as exc:
             raise TransportError("Install bleak to use BLE transport") from exc
 
-        if self.address is None and self.name is None:
+        if self.address is None and self.name is None and not self.any_nus:
             raise TransportError(
-                "BLE address or advertised name is required; "
-                "pass address='F1:C1:8A:35:40:FB' or name='ring'"
+                "BLE address, advertised name, or any_nus=True is required; "
+                "pass address='F1:C1:8A:35:40:FB', name='ring', or any_nus=True"
+            )
+
+        def has_target_service(adv: Any) -> bool:
+            return self.service_uuid.casefold() in {
+                str(value).casefold()
+                for value in (getattr(adv, "service_uuids", None) or [])
+            }
+
+        def passes_rssi(adv: Any) -> bool:
+            return (
+                self.name_min_rssi_dbm is None
+                or getattr(adv, "rssi", None) is None
+                or int(getattr(adv, "rssi")) >= self.name_min_rssi_dbm
             )
 
         target: Any = await BleakScanner.find_device_by_filter(
@@ -630,20 +645,15 @@ class NusClient:
                 _address_matches(getattr(dev, "address", ""), self.address)
                 if self.address is not None
                 else (
-                    str(
-                        getattr(adv, "local_name", None)
-                        or getattr(dev, "name", "")
-                    ).casefold()
-                    == str(self.name).casefold()
-                    and self.service_uuid.casefold()
-                    in {
-                        str(value).casefold()
-                        for value in (getattr(adv, "service_uuids", None) or [])
-                    }
+                    has_target_service(adv)
+                    and passes_rssi(adv)
                     and (
-                        self.name_min_rssi_dbm is None
-                        or getattr(adv, "rssi", None) is None
-                        or int(getattr(adv, "rssi")) >= self.name_min_rssi_dbm
+                        self.any_nus
+                        or str(
+                            getattr(adv, "local_name", None)
+                            or getattr(dev, "name", "")
+                        ).casefold()
+                        == str(self.name).casefold()
                     )
                 )
             ),
@@ -651,8 +661,13 @@ class NusClient:
         )
         if target is None:
             if self.address is None:
+                target_description = (
+                    "any nearby NUS device"
+                    if self.any_nus
+                    else f"BLE device name={self.name!r} with NUS service"
+                )
                 raise TransportError(
-                    f"Nearby BLE device name={self.name!r} with NUS service "
+                    f"Nearby {target_description} "
                     f"was not found (minimum RSSI {self.name_min_rssi_dbm} dBm)"
                 )
             target = self.address
@@ -732,11 +747,16 @@ class RingSoundClient:
         *,
         address: str | None = None,
         name: str | None = None,
+        any_nus: bool = False,
         command_timeout_s: float = DEFAULT_COMMAND_TIMEOUT_S,
         transport: NusClient | None = None,
     ) -> None:
         self.command_timeout_s = command_timeout_s
-        self.transport = transport or NusClient(address=address, name=name)
+        self.transport = transport or NusClient(
+            address=address,
+            name=name,
+            any_nus=any_nus,
+        )
         self._stream = PacketStream()
         self._queues: DefaultDict[int, asyncio.Queue[Packet]] = defaultdict(
             asyncio.Queue
@@ -1516,6 +1536,7 @@ async def connect_ring(
     *,
     address: str | None = None,
     name: str | None = None,
+    any_nus: bool = False,
     command_timeout_s: float = DEFAULT_COMMAND_TIMEOUT_S,
     auto_time_sync: bool = False,
 ) -> RingSoundClient:
@@ -1523,6 +1544,7 @@ async def connect_ring(
     client = RingSoundClient(
         address=address,
         name=name,
+        any_nus=any_nus,
         command_timeout_s=command_timeout_s,
     )
     await client.connect()
@@ -2302,6 +2324,11 @@ def add_connection_args(parser: argparse.ArgumentParser) -> None:
         "--name",
         help="Advertised BLE name, e.g. ring; useful when macOS UUIDs rotate.",
     )
+    target.add_argument(
+        "--any-nus",
+        action="store_true",
+        help="Connect to any nearby BLE device advertising Nordic UART Service.",
+    )
 
 
 def add_audio_decode_args(parser: argparse.ArgumentParser) -> None:
@@ -2336,7 +2363,11 @@ async def cmd_scan(args: argparse.Namespace) -> None:
 
 
 async def cmd_connect(args: argparse.Namespace) -> None:
-    client = await connect_ring(address=args.address, name=args.name)
+    client = await connect_ring(
+        address=args.address,
+        name=args.name,
+        any_nus=args.any_nus,
+    )
     try:
         print(f"connected: {client.is_connected}")
     finally:
@@ -2344,7 +2375,11 @@ async def cmd_connect(args: argparse.Namespace) -> None:
 
 
 async def cmd_info(args: argparse.Namespace) -> None:
-    async with RingSoundClient(address=args.address, name=args.name) as client:
+    async with RingSoundClient(
+        address=args.address,
+        name=args.name,
+        any_nus=args.any_nus,
+    ) as client:
         enable_time_sync(client)
         info = await get_system_info(client)
 
@@ -2360,7 +2395,11 @@ async def cmd_info(args: argparse.Namespace) -> None:
 
 
 async def cmd_time_sync(args: argparse.Namespace) -> None:
-    async with RingSoundClient(address=args.address, name=args.name) as client:
+    async with RingSoundClient(
+        address=args.address,
+        name=args.name,
+        any_nus=args.any_nus,
+    ) as client:
         enable_time_sync(client)
         print(f"time sync auto-response enabled for {args.seconds:g}s")
         await asyncio.sleep(args.seconds)
@@ -2368,13 +2407,21 @@ async def cmd_time_sync(args: argparse.Namespace) -> None:
 
 
 async def cmd_audio_count(args: argparse.Namespace) -> None:
-    async with RingSoundClient(address=args.address, name=args.name) as client:
+    async with RingSoundClient(
+        address=args.address,
+        name=args.name,
+        any_nus=args.any_nus,
+    ) as client:
         count = await get_audio_file_count(client)
     print(f"audio file count: {count}")
 
 
 async def cmd_audio_download(args: argparse.Namespace) -> None:
-    async with RingSoundClient(address=args.address, name=args.name) as client:
+    async with RingSoundClient(
+        address=args.address,
+        name=args.name,
+        any_nus=args.any_nus,
+    ) as client:
         count = await get_audio_file_count(client)
         print(f"audio file count: {count}")
         info, data = await download_audio_file(
@@ -2421,20 +2468,32 @@ async def cmd_audio_clear(args: argparse.Namespace) -> None:
     if not args.yes:
         raise SystemExit("Refusing to clear audio files without --yes.")
 
-    async with RingSoundClient(address=args.address, name=args.name) as client:
+    async with RingSoundClient(
+        address=args.address,
+        name=args.name,
+        any_nus=args.any_nus,
+    ) as client:
         await clear_audio_files(client)
     print("audio files cleared")
 
 
 async def cmd_log_storage(args: argparse.Namespace) -> None:
-    async with RingSoundClient(address=args.address, name=args.name) as client:
+    async with RingSoundClient(
+        address=args.address,
+        name=args.name,
+        any_nus=args.any_nus,
+    ) as client:
         storage = await get_log_storage(client)
     print(f"page_size: {storage.page_size}")
     print(f"total_len: {storage.total_len}")
 
 
 async def cmd_log_read(args: argparse.Namespace) -> None:
-    async with RingSoundClient(address=args.address, name=args.name) as client:
+    async with RingSoundClient(
+        address=args.address,
+        name=args.name,
+        any_nus=args.any_nus,
+    ) as client:
         data = await read_log_chunk(client, args.index, args.offset, args.size)
 
     if args.output:
