@@ -33,6 +33,34 @@ def swap_vertical_probabilities(
     return values
 
 
+def blend_stationary_probabilities(
+    classes: np.ndarray,
+    probabilities: np.ndarray,
+    stationary_confidence: float,
+) -> tuple[np.ndarray, str]:
+    """Expose confirmed ZUPT rest as a first-class gesture state."""
+
+    labels = np.asarray(classes, dtype=str)
+    values = np.asarray(probabilities, dtype=np.float64).copy()
+    idle = np.flatnonzero(labels == "idle")
+    if not len(idle):
+        return values, "mlp"
+
+    target = int(idle[0])
+    confidence = min(0.995, max(0.90, 0.86 + 0.13 * stationary_confidence))
+    other_sum = float(np.sum(values) - values[target])
+    if other_sum <= 1e-12:
+        values.fill((1.0 - confidence) / max(1, len(values) - 1))
+    else:
+        scale = (1.0 - confidence) / other_sum
+        for index in range(len(values)):
+            if index != target:
+                values[index] *= scale
+    values[target] = confidence
+    values /= np.sum(values)
+    return values, "zupt-stationary"
+
+
 @dataclass(frozen=True)
 class DirectionDecision:
     label: str
@@ -62,6 +90,8 @@ class DirectionalGestureRecognizer:
         self.segment_start = (0.0, 0.0, 0.0)
         self.segment_id = 0
         self.was_moving = False
+        self.gesture_active = False
+        self.quiet_started_ms: int | None = None
         self.last_decision: DirectionDecision | None = None
         self.hold_until_ms = 0
 
@@ -117,30 +147,68 @@ class DirectionalGestureRecognizer:
         timestamp_ms: int,
     ) -> DirectionDecision | None:
         position = estimate.position_m
-        if estimate.segment_id != self.segment_id and estimate.segment_id > 0:
+        active_sample = bool(
+            estimate.moving or estimate.translation_candidate
+        )
+        confirmed_rest = bool(
+            not active_sample
+            and estimate.armed
+            and estimate.zupt_confidence >= 0.62
+        )
+        if active_sample:
+            self.quiet_started_ms = None
+        elif self.gesture_active and self.quiet_started_ms is None:
+            self.quiet_started_ms = timestamp_ms
+        quiet_elapsed_ms = (
+            (timestamp_ms - self.quiet_started_ms) & 0xFFFFFFFF
+            if self.quiet_started_ms is not None
+            else 0
+        )
+        pause_complete = bool(
+            confirmed_rest
+            or (
+                self.gesture_active
+                and not active_sample
+                and quiet_elapsed_ms >= 300
+            )
+        )
+
+        # One physical rest→move→rest gesture may be split into several
+        # integration segments by velocity zero crossings. Keep one anchor and
+        # latch the first clear cardinal direction so the braking/rebound tail
+        # cannot reverse an otherwise correct up/down decision.
+        if active_sample and not self.gesture_active:
+            self.gesture_active = True
             self.segment_id = estimate.segment_id
             self.segment_start = self.previous_position
             self.last_decision = None
             self.hold_until_ms = 0
 
-        current = (
-            self._classify(position, estimate.segment_id)
-            if estimate.moving and estimate.segment_id > 0
-            else None
-        )
-        if current is not None:
-            self.last_decision = current
-            self.hold_until_ms = timestamp_ms + self.hold_ms
-
-        if self.was_moving and not estimate.moving and estimate.segment_id > 0:
-            final = self._classify(position, estimate.segment_id)
-            if final is not None:
-                self.last_decision = final
+        current: DirectionDecision | None = None
+        if self.gesture_active and self.last_decision is None:
+            current = self._classify(position, estimate.segment_id)
+            if current is not None:
+                self.last_decision = current
                 self.hold_until_ms = timestamp_ms + self.hold_ms
 
-        self.was_moving = estimate.moving
+        if pause_complete:
+            if self.gesture_active:
+                if self.last_decision is None:
+                    self.last_decision = self._classify(
+                        position,
+                        estimate.segment_id,
+                    )
+                if self.last_decision is not None:
+                    self.hold_until_ms = timestamp_ms + self.hold_ms
+                self.gesture_active = False
+                self.quiet_started_ms = None
+            self.segment_start = position
+
+        self.was_moving = active_sample
         self.previous_position = position
-        if self.last_decision is not None and timestamp_ms <= self.hold_until_ms:
+        if self.last_decision is not None and (
+            self.gesture_active or timestamp_ms <= self.hold_until_ms
+        ):
             return self.last_decision
         return current
 

@@ -112,6 +112,34 @@ class LiveOrientationTests(unittest.TestCase):
         self.assertFalse(estimator.stationary)
         self.assertEqual(estimator.stationary_confidence, 0.0)
 
+    def test_quiet_bias_step_is_relearned_instead_of_becoming_motion(self) -> None:
+        estimator = SixAxisAhrs()
+        old_bias = np.asarray([-2.0, -15.0, 0.5])
+        for _ in range(100):
+            estimator.update(
+                np.asarray([1.0, 0.0, 0.0]),
+                old_bias,
+                0.01,
+            )
+        self.assertTrue(estimator.stationary)
+
+        new_bias = np.asarray([0.5, -0.7, -0.9])
+        for _ in range(120):
+            estimator.update(
+                np.asarray([1.0, 0.0, 0.0]),
+                new_bias,
+                0.01,
+            )
+
+        self.assertTrue(estimator.stationary)
+        self.assertGreater(estimator.stationary_confidence, 0.8)
+        np.testing.assert_allclose(
+            estimator.gyro_bias_dps,
+            new_bias,
+            atol=0.05,
+        )
+        self.assertLess(np.linalg.norm(estimator.corrected_gyro_dps), 0.05)
+
 
 if __name__ == "__main__":
     unittest.main()
