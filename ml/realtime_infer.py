@@ -134,6 +134,35 @@ def put_latest(queue: asyncio.Queue[dict], payload: dict) -> None:
     queue.put_nowait(payload)
 
 
+async def start_sensor_stream(ring: sdk.RingSoundClient) -> sdk.SensorStartInfo:
+    try:
+        return await sdk.start_sensor_report(ring)
+    except sdk.DeviceError as exc:
+        if exc.error_code != 2:
+            raise
+
+    print(
+        "Ring is in recording mode. Single-click the ring once to enter "
+        "gesture mode...",
+        file=sys.stderr,
+        flush=True,
+    )
+    for attempt in range(3):
+        await sdk.wait_sensor_key_single_press_event(ring, timeout_s=45.0)
+        await asyncio.sleep(0.35)
+        try:
+            return await sdk.start_sensor_report(ring)
+        except sdk.DeviceError as exc:
+            if exc.error_code != 2 or attempt == 2:
+                raise
+            print(
+                "Mode switch did not complete; single-click once more.",
+                file=sys.stderr,
+                flush=True,
+            )
+    raise RuntimeError("Unable to enter gesture mode")
+
+
 async def run(args: argparse.Namespace) -> None:
     if args.threshold is not None and not 0 <= args.threshold <= 1:
         raise ValueError("--threshold must be between zero and one")
@@ -183,7 +212,7 @@ async def run(args: argparse.Namespace) -> None:
         async with sdk.RingSoundClient(
             address=args.address, name=args.name
         ) as ring:
-            start_info = await sdk.start_sensor_report(ring)
+            start_info = await start_sensor_stream(ring)
             report_started = True
             source_window_size = max(
                 2, round(model.window_seconds * start_info.sample_rate_hz)
@@ -325,6 +354,9 @@ def main() -> None:
     args = build_parser().parse_args()
     try:
         asyncio.run(run(args))
+    except sdk.RingSoundError as exc:
+        print(f"ring connection failed: {exc}", file=sys.stderr)
+        raise SystemExit(1)
     except KeyboardInterrupt:
         raise SystemExit(130)
 

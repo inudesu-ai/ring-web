@@ -637,6 +637,10 @@ class NusClient:
                         str(value).casefold()
                         for value in (getattr(adv, "service_uuids", None) or [])
                     }
+                    and (
+                        getattr(adv, "rssi", None) is None
+                        or int(getattr(adv, "rssi")) >= -82
+                    )
                 )
             ),
             timeout=self.scan_timeout_s,
@@ -644,7 +648,8 @@ class NusClient:
         if target is None:
             if self.address is None:
                 raise TransportError(
-                    f"BLE device name={self.name!r} with NUS service was not found"
+                    f"Nearby BLE device name={self.name!r} with NUS service "
+                    "was not found (minimum RSSI -82 dBm)"
                 )
             target = self.address
         else:
