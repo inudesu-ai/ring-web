@@ -36,7 +36,7 @@ const elements = {
 };
 
 const query = new URLSearchParams(window.location.search);
-const apiBase = query.get('api') || 'http://192.168.5.2:3000';
+const apiBase = query.get('api') || window.location.origin;
 const socketBase = apiBase.replace(/^http/, 'ws');
 const webSocketUrl = `${socketBase}/ws`;
 

@@ -134,6 +134,15 @@ check, and mechanical-dog command architecture are documented in
 
 ## Live gesture API
 
+The Express API also serves the complete dashboard from `public/`. A separate
+`python -m http.server` process is no longer required:
+
+```bash
+cd api
+npm start
+# Open http://HOST:3000
+```
+
 The local inference bridge publishes predictions to:
 
 ```text

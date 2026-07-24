@@ -34,6 +34,18 @@ test('authenticated gesture events are broadcast and retained', async (context) 
   const hello = await helloPromise;
   assert.equal(hello.type, 'hello');
 
+  const dashboardResponse = await fetch(`${baseUrl}/`);
+  assert.equal(dashboardResponse.status, 200);
+  assert.match(
+    dashboardResponse.headers.get('content-type') || '',
+    /text\/html/,
+  );
+  assert.match(await dashboardResponse.text(), /RING MOTION LAB/);
+
+  const frontendResponse = await fetch(`${baseUrl}/app.js`);
+  assert.equal(frontendResponse.status, 200);
+  assert.match(await frontendResponse.text(), /window\.location\.origin/);
+
   const rejected = await fetch(`${baseUrl}/v1/gesture`, {
     method: 'POST',
     headers: { 'content-type': 'application/json' },

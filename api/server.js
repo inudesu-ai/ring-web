@@ -1,11 +1,15 @@
 import 'dotenv/config';
 import { randomUUID, timingSafeEqual } from 'node:crypto';
 import http from 'node:http';
-import { pathToFileURL } from 'node:url';
+import path from 'node:path';
+import { fileURLToPath, pathToFileURL } from 'node:url';
 import cors from 'cors';
 import express from 'express';
 import helmet from 'helmet';
 import { WebSocket, WebSocketServer } from 'ws';
+
+const API_DIR = path.dirname(fileURLToPath(import.meta.url));
+const PUBLIC_DIR = path.resolve(API_DIR, '..', 'public');
 
 function safeTokenEquals(expected, supplied) {
   const expectedBytes = Buffer.from(expected);
@@ -322,6 +326,10 @@ export function createRingServer({ bridgeToken = process.env.RING_BRIDGE_TOKEN |
     return res.status(202).json({ ok: true, event_id: event.event_id });
   });
 
+  // Serve the dashboard from the same process and origin as the API. Keeping
+  // this after all API routes prevents a static file from shadowing /v1/*.
+  app.use(express.static(PUBLIC_DIR, { extensions: ['html'] }));
+
   webSocketServer.on('connection', (socket) => {
     socket.isAlive = true;
     socket.on('pong', () => {
@@ -364,7 +372,7 @@ export function createRingServer({ bridgeToken = process.env.RING_BRIDGE_TOKEN |
 
 export function startRingServer() {
   const port = Number(process.env.PORT || 3000);
-  const host = process.env.HOST || '127.0.0.1';
+  const host = process.env.HOST || '0.0.0.0';
   const instance = createRingServer();
   instance.server.listen(port, host, () => {
     console.log(`ring-api listening on http://${host}:${port}`);
