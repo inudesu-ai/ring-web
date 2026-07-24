@@ -65,6 +65,15 @@ test('authenticated gesture events are broadcast and retained', async (context) 
         plane_score: 0.96,
         roundness: 0.82,
       },
+      robot_command: {
+        command: 'turn_left',
+        emitted: true,
+        reason: 'confirmed',
+        armed: false,
+        confirmations: 2,
+        source_gesture: 'left',
+        confidence: 0.93,
+      },
     }),
   });
   assert.equal(accepted.status, 202);
@@ -76,6 +85,9 @@ test('authenticated gesture events are broadcast and retained', async (context) 
   assert.equal(event.recognition_source, 'mlp');
   assert.equal(event.circle_metrics.turn_radians, 6.1);
   assert.equal(event.circle_metrics.roundness, 0.82);
+  assert.equal(event.robot_command.command, 'turn_left');
+  assert.equal(event.robot_command.emitted, true);
+  assert.equal(event.robot_command.confirmations, 2);
 
   const latestResponse = await fetch(`${baseUrl}/v1/gesture/latest`);
   const latest = await latestResponse.json();

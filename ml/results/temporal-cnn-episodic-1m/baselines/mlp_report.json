@@ -1,0 +1,72 @@
+{
+  "model_type": "ring-mlp-v1",
+  "classes": [
+    "circle",
+    "double_tap",
+    "down",
+    "idle",
+    "left",
+    "right",
+    "rotate_back",
+    "rotate_front",
+    "up",
+    "wave"
+  ],
+  "scores": {
+    "train": {
+      "accuracy": 1.0,
+      "macro_f1": 1.0
+    },
+    "validation": {
+      "accuracy": 1.0,
+      "macro_f1": 1.0
+    },
+    "test": {
+      "accuracy": 1.0,
+      "macro_f1": 1.0
+    }
+  },
+  "fit_diagnosis": {
+    "status": "balanced",
+    "underfit": false,
+    "overfit": false,
+    "domain_shift_sensitive": false,
+    "generalization_gap": 0.0,
+    "validation_test_gap": 0.0
+  },
+  "metadata": {
+    "best_validation_loss": 0.00032500268530110863,
+    "epochs_completed": 27,
+    "training_sessions": 17500,
+    "validation_sessions": 3750,
+    "test_sessions": 3750,
+    "training_windows": 17500,
+    "validation_windows": 3750,
+    "test_windows": 3750,
+    "recommended_threshold": 0.5,
+    "split_method": "predefined",
+    "scores": {
+      "train": {
+        "accuracy": 1.0,
+        "macro_f1": 1.0
+      },
+      "validation": {
+        "accuracy": 1.0,
+        "macro_f1": 1.0
+      },
+      "test": {
+        "accuracy": 1.0,
+        "macro_f1": 1.0
+      }
+    },
+    "fit_diagnosis": {
+      "status": "balanced",
+      "underfit": false,
+      "overfit": false,
+      "domain_shift_sensitive": false,
+      "generalization_gap": 0.0,
+      "validation_test_gap": 0.0
+    },
+    "seed": 20260724
+  }
+}

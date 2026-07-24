@@ -1,0 +1,117 @@
+{
+  "schema": "ring-imu-simulation-manifest/v2",
+  "generator": "physics-informed-episodic-six-axis-v2",
+  "records": 1000000,
+  "subjects": 100,
+  "classes": [
+    "idle",
+    "wave",
+    "rotate_back",
+    "rotate_front",
+    "left",
+    "right",
+    "up",
+    "down",
+    "circle",
+    "double_tap"
+  ],
+  "class_counts": {
+    "idle": 100000,
+    "wave": 100000,
+    "rotate_back": 100000,
+    "rotate_front": 100000,
+    "left": 100000,
+    "right": 100000,
+    "up": 100000,
+    "down": 100000,
+    "circle": 100000,
+    "double_tap": 100000
+  },
+  "partition_counts": {
+    "train": 700000,
+    "validation": 150000,
+    "test": 150000
+  },
+  "sessions": 25000,
+  "episodes_per_subject_class": 25,
+  "samples_per_session": 40,
+  "sample_rate_hz": 25.0,
+  "window_seconds": 1.6,
+  "seed": 20260724,
+  "split": "70 train / 15 validation / 15 shifted test subjects",
+  "test_domain_shift": {
+    "placement_degrees": 17,
+    "noise_bias_severity_multiplier": 1.35
+  },
+  "variability": [
+    "gesture onset, duration, amplitude, and speed",
+    "subject and episode sensor placement",
+    "axis gain, static bias, and bias random walk",
+    "sensor bandwidth and white measurement noise",
+    "sampling clock scale and jitter",
+    "int16 quantisation"
+  ],
+  "shards": [
+    {
+      "path": "00-idle.jsonl.gz",
+      "records": 100000,
+      "bytes": 1926427,
+      "sha256": "baef7321a5aa3098aaf4450b7f839a10374ba903abcf28e7184c8750b551cfdc"
+    },
+    {
+      "path": "01-wave.jsonl.gz",
+      "records": 100000,
+      "bytes": 2257322,
+      "sha256": "9fb57bc9a5fc0b6a3a204e1f986b23e70162cc5b41591c50cb051bbe0494d6bd"
+    },
+    {
+      "path": "02-rotate_back.jsonl.gz",
+      "records": 100000,
+      "bytes": 2297878,
+      "sha256": "33267708ec452486e5b7c4b9415edb4807bc4b71930112ed6c184870c8cd37ff"
+    },
+    {
+      "path": "03-rotate_front.jsonl.gz",
+      "records": 100000,
+      "bytes": 2278493,
+      "sha256": "cc57236489851248976af3d3cea81a62aacf97a283af8bffa555071521ff6f53"
+    },
+    {
+      "path": "04-left.jsonl.gz",
+      "records": 100000,
+      "bytes": 2139460,
+      "sha256": "8ec266bd7afe23d9eb530e4bd37b52435d439be57d8998e0090dca14b60e8e24"
+    },
+    {
+      "path": "05-right.jsonl.gz",
+      "records": 100000,
+      "bytes": 2154541,
+      "sha256": "ef0a052918497f135ab18a792f8553a79f3f424550d6c1f653ab34ad48755b4a"
+    },
+    {
+      "path": "06-up.jsonl.gz",
+      "records": 100000,
+      "bytes": 2104224,
+      "sha256": "05252bec581997c0f4ce4cb98205d79a917dd33e58cdf4b6aee1218836c560aa"
+    },
+    {
+      "path": "07-down.jsonl.gz",
+      "records": 100000,
+      "bytes": 2138619,
+      "sha256": "50966eb0ff4027e8ecc10827a9914015c1d4df3c0c2407ffa9b7145df6277078"
+    },
+    {
+      "path": "08-circle.jsonl.gz",
+      "records": 100000,
+      "bytes": 2351882,
+      "sha256": "4c0a5a2094f9f23495a03dafc3b58e1f9fd6d75ac438fe711be3edc9a505d32f"
+    },
+    {
+      "path": "09-double_tap.jsonl.gz",
+      "records": 100000,
+      "bytes": 2130157,
+      "sha256": "b0d220f26d9ae53c87c622b43fdbf6fce74a44f58500367ac8102c0b049a1490"
+    }
+  ],
+  "elapsed_seconds": 7.661703292047605
+}

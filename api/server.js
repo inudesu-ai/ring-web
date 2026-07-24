@@ -121,6 +121,22 @@ function normalizeCircleMetrics(value) {
   };
 }
 
+function normalizeRobotCommand(value) {
+  if (!value || typeof value !== 'object') return null;
+  const confidence = cleanNumber(value.confidence, 1);
+  const confirmations = cleanNumber(value.confirmations, 100);
+  if (confidence === null || confirmations === null) return null;
+  return {
+    command: cleanText(value.command, 64) || null,
+    emitted: value.emitted === true,
+    reason: cleanText(value.reason, 64) || 'unknown',
+    armed: value.armed === true,
+    confirmations: Math.max(0, Math.trunc(confirmations)),
+    source_gesture: cleanText(value.source_gesture, 64),
+    confidence: Math.min(1, Math.max(0, confidence)),
+  };
+}
+
 function normalizeGesture(body) {
   const gesture = cleanText(body?.gesture, 64);
   const rawGesture = cleanText(body?.raw_gesture, 64) || gesture;
@@ -147,12 +163,13 @@ function normalizeGesture(body) {
     raw_gesture: rawGesture,
     confidence,
     probabilities,
-    model_type: cleanText(body.model_type, 64) || 'unknown',
+    model_type: cleanText(body.model_type, 128) || 'unknown',
     model_file: cleanText(body.model_file, 128),
     recognition_source: cleanText(body.recognition_source, 64) || 'mlp',
     direction_displacement_m:
       normalizeVector(body?.direction_displacement_m, ['x', 'y', 'z'], 1000),
     circle_metrics: normalizeCircleMetrics(body?.circle_metrics),
+    robot_command: normalizeRobotCommand(body?.robot_command),
     source: cleanText(body.source, 128) || 'ring-bridge',
     device_timestamp_ms: Number.isFinite(Number(body.device_timestamp_ms))
       ? Number(body.device_timestamp_ms)

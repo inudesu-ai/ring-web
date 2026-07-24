@@ -13,6 +13,7 @@ sys.path.insert(0, str(ML_DIR))
 from ringml.hmm import GaussianHMMClassifier  # noqa: E402
 from ringml.mlp import MLPClassifier  # noqa: E402
 from ringml.model import load_model  # noqa: E402
+from ringml.temporal_cnn import TemporalCNNClassifier  # noqa: E402
 
 
 def synthetic_windows(seed: int = 4) -> tuple[np.ndarray, np.ndarray]:
@@ -32,6 +33,54 @@ def synthetic_windows(seed: int = 4) -> tuple[np.ndarray, np.ndarray]:
 
 
 class ModelTests(unittest.TestCase):
+    def test_temporal_cnn_save_load_and_probabilities(self) -> None:
+        rng = np.random.default_rng(12)
+        parameters = {
+            "stem_weight": rng.normal(0, 0.02, (24, 8, 3)),
+            "stem_bias": np.zeros(24),
+            "block1_dw_weight": rng.normal(0, 0.02, (24, 1, 5)),
+            "block1_dw_bias": np.zeros(24),
+            "block1_pw_weight": rng.normal(0, 0.02, (32, 24, 1)),
+            "block1_pw_bias": np.zeros(32),
+            "block1_skip_weight": rng.normal(0, 0.02, (32, 24, 1)),
+            "block1_skip_bias": np.zeros(32),
+            "block2_dw_weight": rng.normal(0, 0.02, (32, 1, 5)),
+            "block2_dw_bias": np.zeros(32),
+            "block2_pw_weight": rng.normal(0, 0.02, (32, 32, 1)),
+            "block2_pw_bias": np.zeros(32),
+            "block3_dw_weight": rng.normal(0, 0.02, (32, 1, 5)),
+            "block3_dw_bias": np.zeros(32),
+            "block3_pw_weight": rng.normal(0, 0.02, (32, 32, 1)),
+            "block3_pw_bias": np.zeros(32),
+            "attention_weight": rng.normal(0, 0.02, (1, 32, 1)),
+            "attention_bias": np.zeros(1),
+            "fc1_weight": rng.normal(0, 0.02, (48, 96)),
+            "fc1_bias": np.zeros(48),
+            "fc2_weight": rng.normal(0, 0.02, (2, 48)),
+            "fc2_bias": np.zeros(2),
+        }
+        model = TemporalCNNClassifier(
+            classes=["idle", "wave"],
+            target_steps=20,
+            window_seconds=0.8,
+            stride_seconds=0.2,
+            feature_mean=np.zeros(8),
+            feature_std=np.ones(8),
+            parameters=parameters,
+        )
+        windows = rng.normal(0, 0.05, (3, 20, 6))
+        probabilities = model.predict_proba(windows)
+        np.testing.assert_allclose(probabilities.sum(axis=1), 1.0)
+
+        with tempfile.TemporaryDirectory() as temporary:
+            path = Path(temporary) / "temporal-cnn.npz"
+            model.save(path)
+            loaded = load_model(path)
+            np.testing.assert_allclose(
+                loaded.predict_proba(windows),
+                probabilities,
+            )
+
     def test_mlp_fit_save_and_load(self) -> None:
         windows, labels = synthetic_windows()
         train_indices = np.r_[0:14, 18:32]

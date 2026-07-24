@@ -1,0 +1,363 @@
+{
+  "schema": "ring-temporal-cnn-experiment/v1",
+  "classes": [
+    "circle",
+    "double_tap",
+    "down",
+    "idle",
+    "left",
+    "right",
+    "rotate_back",
+    "rotate_front",
+    "up",
+    "wave"
+  ],
+  "sessions": 25000,
+  "subjects": {
+    "train": 70,
+    "validation": 15,
+    "test": 15
+  },
+  "windows": {
+    "train": 17500,
+    "validation": 3750,
+    "test": 3750
+  },
+  "selected_candidate": {
+    "name": "balanced",
+    "learning_rate": 0.002,
+    "weight_decay": 0.0008,
+    "rotation_degrees": 8.0,
+    "block_dropout": 0.12,
+    "head_dropout": 0.25
+  },
+  "candidate_validation": [
+    {
+      "name": "balanced",
+      "validation": {
+        "accuracy": 1.0,
+        "macro_f1": 1.0
+      },
+      "stress_validation": {
+        "accuracy": 1.0,
+        "macro_f1": 1.0
+      },
+      "epochs": 27
+    },
+    {
+      "name": "robust",
+      "validation": {
+        "accuracy": 1.0,
+        "macro_f1": 1.0
+      },
+      "stress_validation": {
+        "accuracy": 1.0,
+        "macro_f1": 1.0
+      },
+      "epochs": 16
+    },
+    {
+      "name": "low-regularisation",
+      "validation": {
+        "accuracy": 1.0,
+        "macro_f1": 1.0
+      },
+      "stress_validation": {
+        "accuracy": 1.0,
+        "macro_f1": 1.0
+      },
+      "epochs": 15
+    }
+  ],
+  "scores": {
+    "train": {
+      "accuracy": 1.0,
+      "macro_f1": 1.0
+    },
+    "validation": {
+      "accuracy": 1.0,
+      "macro_f1": 1.0
+    },
+    "test": {
+      "accuracy": 1.0,
+      "macro_f1": 1.0
+    },
+    "stress_test": {
+      "accuracy": 0.9989333333333333,
+      "macro_f1": 0.998934036883175
+    }
+  },
+  "fit_diagnosis": {
+    "status": "balanced",
+    "underfit": false,
+    "overfit": false,
+    "domain_shift_sensitive": false,
+    "generalization_gap": 0.0,
+    "validation_test_gap": 0.0
+  },
+  "threshold_validation": {
+    "threshold": 0.5,
+    "accepted_precision": 1.0,
+    "coverage": 1.0,
+    "deployment_floor": 0.85
+  },
+  "calibration": {
+    "validation_ece": 0.018500186888376874,
+    "test_ece": 0.02219877195358276,
+    "stress_test_ece": 0.030175190464655558
+  },
+  "test_confusion": [
+    [
+      375,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0
+    ],
+    [
+      0,
+      375,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0
+    ],
+    [
+      0,
+      0,
+      375,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0
+    ],
+    [
+      0,
+      0,
+      0,
+      375,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0
+    ],
+    [
+      0,
+      0,
+      0,
+      0,
+      375,
+      0,
+      0,
+      0,
+      0,
+      0
+    ],
+    [
+      0,
+      0,
+      0,
+      0,
+      0,
+      375,
+      0,
+      0,
+      0,
+      0
+    ],
+    [
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      375,
+      0,
+      0,
+      0
+    ],
+    [
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      375,
+      0,
+      0
+    ],
+    [
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      375,
+      0
+    ],
+    [
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      375
+    ]
+  ],
+  "stress_test_confusion": [
+    [
+      375,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0
+    ],
+    [
+      0,
+      375,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0
+    ],
+    [
+      0,
+      0,
+      375,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0
+    ],
+    [
+      0,
+      0,
+      0,
+      373,
+      2,
+      0,
+      0,
+      0,
+      0,
+      0
+    ],
+    [
+      0,
+      0,
+      0,
+      0,
+      375,
+      0,
+      0,
+      0,
+      0,
+      0
+    ],
+    [
+      0,
+      0,
+      0,
+      1,
+      0,
+      374,
+      0,
+      0,
+      0,
+      0
+    ],
+    [
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      375,
+      0,
+      0,
+      0
+    ],
+    [
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      375,
+      0,
+      0
+    ],
+    [
+      0,
+      0,
+      0,
+      0,
+      1,
+      0,
+      0,
+      0,
+      374,
+      0
+    ],
+    [
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      375
+    ]
+  ],
+  "parameter_count": 10019,
+  "model_bytes": 53109,
+  "numpy_latency_ms_per_window": 0.03167333488818258,
+  "deployment_stride_seconds": 0.4,
+  "elapsed_seconds": 11.73530162498355,
+  "limitations": [
+    "All class labels in this experiment are physics-informed simulation.",
+    "Real captures are unlabeled and cannot establish real command accuracy.",
+    "The continuous spotter and robot command state machine require separate tests."
+  ]
+}

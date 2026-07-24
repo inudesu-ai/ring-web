@@ -8,13 +8,18 @@ import numpy as np
 
 from .hmm import GaussianHMMClassifier
 from .mlp import MLPClassifier
+from .temporal_cnn import TemporalCNNClassifier
 
 
-def load_model(path: Path) -> MLPClassifier | GaussianHMMClassifier:
+def load_model(
+    path: Path,
+) -> MLPClassifier | GaussianHMMClassifier | TemporalCNNClassifier:
     with np.load(path, allow_pickle=False) as values:
         model_type = str(values["model_type"])
     if model_type == MLPClassifier.model_type:
         return MLPClassifier.load(path)
     if model_type == GaussianHMMClassifier.model_type:
         return GaussianHMMClassifier.load(path)
+    if model_type == TemporalCNNClassifier.model_type:
+        return TemporalCNNClassifier.load(path)
     raise ValueError(f"Unsupported model type: {model_type}")

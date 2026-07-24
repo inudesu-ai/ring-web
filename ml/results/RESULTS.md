@@ -1,5 +1,42 @@
 # Six-axis IMU simulation results
 
+## 2026-07-24 episodic temporal-CNN update
+
+The original periodic random-phase simulation below is retained as a baseline.
+For command gestures, it made opposite directions partly indistinguishable.
+The new episodic generator creates one neutral-to-motion command per session
+and matches the real ring's approximate `+X ~= gravity` package orientation.
+
+```text
+1,000,000 rows
+25,000 gesture episodes
+100 simulated subjects
+70 / 15 / 15 train / validation / shifted-test subjects
+10 balanced classes
+```
+
+The selected 10,019-parameter depthwise temporal CNN achieved:
+
+| Split | Macro F1 |
+| --- | ---: |
+| Train | 1.0000 |
+| Validation | 1.0000 |
+| Shifted test | 1.0000 |
+| Additional rotation/noise/time-shift stress test | 0.9989 |
+
+The same episodic data gave the MLP a clean-test score of 1.0 but only `0.9416`
+on the stress test. On three unlabeled real captures, the temporal CNN
+classified all 131 high-stationary windows as `idle` and produced zero
+high-stationary commands at threshold 0.85.
+
+These results validate the simulation/training pipeline only. The real captures
+lack gesture time labels, so they cannot establish real class accuracy.
+
+- [Complete temporal-CNN report](temporal-cnn-episodic-1m/experiment_report.json)
+- [Real idle evaluation](temporal-cnn-episodic-1m/real_idle_evaluation.json)
+- [Research and mechanical-dog roadmap](../research/MAINSTREAM_GESTURE_RECOGNITION.md)
+- [Temporal CNN model](temporal-cnn-episodic-1m/models/gesture-temporal-cnn-sim-1m.npz)
+
 ## One-million-row dataset
 
 Independent decompression and line counting confirmed exactly:

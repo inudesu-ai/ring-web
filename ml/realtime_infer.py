@@ -45,6 +45,7 @@ from ringml.direction import (  # noqa: E402
 from ringml.displacement import DisplacementTracker  # noqa: E402
 from ringml.model import load_model  # noqa: E402
 from ringml.orientation import SixAxisAhrs  # noqa: E402
+from ringml.robot_commands import RobotCommandGate  # noqa: E402
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -107,6 +108,14 @@ def build_parser() -> argparse.ArgumentParser:
         "--quiet",
         action="store_true",
         help="Publish predictions without printing every JSON event.",
+    )
+    parser.add_argument(
+        "--robot-commands",
+        action="store_true",
+        help=(
+            "Add a debounced one-shot robot_command decision to each gesture "
+            "event. This does not contact the robot by itself."
+        ),
     )
     return parser
 
@@ -284,6 +293,7 @@ async def run(args: argparse.Namespace) -> None:
     circle_decision: CircleDecision | None = None
     depth = DepthGestureRecognizer()
     depth_decision: DepthDecision | None = None
+    robot_gate = RobotCommandGate(threshold=max(0.85, threshold))
 
     print(
         f"Loaded {model.model_type}: {', '.join(model.classes.tolist())}; "
@@ -344,6 +354,7 @@ async def run(args: argparse.Namespace) -> None:
                     direction.reset()
                     circle.reset()
                     depth.reset()
+                    robot_gate.reset()
                     raw_window.clear()
                     samples_since_prediction = 0
                     last_timestamp_ms = None
@@ -516,6 +527,15 @@ async def run(args: argparse.Namespace) -> None:
                         confidence = float(fused[best_index])
                         raw_gesture = str(model.classes[best_index])
                     gesture = raw_gesture if confidence >= threshold else "uncertain"
+                    robot_command = (
+                        robot_gate.update(
+                            gesture,
+                            confidence,
+                            timestamp_ms=sample.timestamp_ms,
+                        ).as_payload()
+                        if args.robot_commands
+                        else None
+                    )
                     displacement_decision = (
                         direction_decision
                         if recognition_source == "zupt-direction"
@@ -536,6 +556,7 @@ async def run(args: argparse.Namespace) -> None:
                         ),
                         "model_file": args.model.name,
                         "recognition_source": recognition_source,
+                        "robot_command": robot_command,
                         "direction_displacement_m": (
                             {
                                 axis: float(value)

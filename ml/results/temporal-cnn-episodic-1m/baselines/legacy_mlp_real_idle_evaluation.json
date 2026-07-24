@@ -1,0 +1,58 @@
+{
+  "schema": "ring-real-unlabeled-evaluation/v1",
+  "model": "ml/results/million-1m/models/gesture-mlp-sim-1m.npz",
+  "model_type": "ring-mlp-v1",
+  "threshold": 0.65,
+  "files": [
+    {
+      "path": "/Users/jz/Desktop/ring_sound_SDK/ring_sound_SDK/lr_capture.jsonl",
+      "sample_rate_hz": 100.0,
+      "windows": 36,
+      "high_stationary_windows": 23,
+      "high_stationary_idle_recall": 0.0,
+      "high_stationary_false_command_rate": 0.0,
+      "prediction_counts": {
+        "rotate_back": 36
+      }
+    },
+    {
+      "path": "/Users/jz/Desktop/ring_sound_SDK/ring_sound_SDK/lr_capture_v2.jsonl",
+      "sample_rate_hz": 100.0,
+      "windows": 108,
+      "high_stationary_windows": 34,
+      "high_stationary_idle_recall": 0.0,
+      "high_stationary_false_command_rate": 0.0,
+      "prediction_counts": {
+        "rotate_back": 108
+      }
+    },
+    {
+      "path": "/Users/jz/Desktop/ring_sound_SDK/ring_sound_SDK/rotation_capture.jsonl",
+      "sample_rate_hz": 100.0,
+      "windows": 148,
+      "high_stationary_windows": 74,
+      "high_stationary_idle_recall": 0.0,
+      "high_stationary_false_command_rate": 0.0,
+      "prediction_counts": {
+        "circle": 5,
+        "rotate_back": 140,
+        "rotate_front": 2,
+        "wave": 1
+      }
+    }
+  ],
+  "summary": {
+    "windows": 292,
+    "high_stationary_windows": 131,
+    "high_stationary_idle_recall": 0.0,
+    "high_stationary_false_command_rate": 0.0,
+    "accepted_non_idle_windows": 10,
+    "prediction_counts": {
+      "circle": 5,
+      "rotate_back": 284,
+      "rotate_front": 2,
+      "wave": 1
+    }
+  },
+  "interpretation": "The captures have no command labels. This report can measure idle false activations, but not real gesture-class accuracy."
+}

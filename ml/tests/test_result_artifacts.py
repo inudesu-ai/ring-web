@@ -14,6 +14,37 @@ from ringml.model import load_model  # noqa: E402
 
 
 class ResultArtifactTests(unittest.TestCase):
+    def test_episodic_temporal_cnn_artifacts_are_consistent(self) -> None:
+        result_dir = ML_DIR / "results" / "temporal-cnn-episodic-1m"
+        manifest = json.loads(
+            (result_dir / "dataset_manifest.json").read_text(encoding="utf-8")
+        )
+        report = json.loads(
+            (result_dir / "experiment_report.json").read_text(encoding="utf-8")
+        )
+        real_idle = json.loads(
+            (result_dir / "real_idle_evaluation.json").read_text(encoding="utf-8")
+        )
+        self.assertEqual(manifest["records"], 1_000_000)
+        self.assertEqual(manifest["sessions"], 25_000)
+        self.assertEqual(
+            report["subjects"], {"train": 70, "validation": 15, "test": 15}
+        )
+        self.assertGreaterEqual(report["scores"]["stress_test"]["macro_f1"], 0.99)
+        self.assertEqual(report["fit_diagnosis"]["status"], "balanced")
+        self.assertEqual(
+            real_idle["summary"]["high_stationary_false_command_rate"], 0.0
+        )
+
+        model = load_model(
+            result_dir / "models" / "gesture-temporal-cnn-sim-1m.npz"
+        )
+        probabilities = model.predict_proba(np.zeros((2, 40, 6)))
+        self.assertEqual(probabilities.shape, (2, 10))
+        np.testing.assert_allclose(probabilities.sum(axis=1), 1.0)
+        self.assertEqual(model.metadata["dataset_records"], 1_000_000)
+        self.assertEqual(model.stride_seconds, 0.4)
+
     def test_million_row_reports_and_models_are_consistent(self) -> None:
         result_dir = ML_DIR / "results" / "million-1m"
         manifest = json.loads(

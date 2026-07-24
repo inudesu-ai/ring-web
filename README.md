@@ -50,6 +50,8 @@ The [`ml/`](ml/) pipeline includes:
   Baum-Welch EM;
 - a small NumPy MLP trained with Adam, class balancing, dropout, and early
   stopping;
+- a 10k-parameter depthwise temporal CNN trained with placement/noise
+  augmentation and exported to portable NumPy inference;
 - subject/session-aware train/validation/test splitting;
 - portable `.npz` model files;
 - live BLE inference and authenticated publishing to the Web dashboard.
@@ -67,6 +69,12 @@ python ml/train_hmm.py \
 python ml/train_mlp.py \
   --data "ml/data/*.jsonl" \
   --output ml/models/gesture-mlp.npz
+
+python -m pip install -r ml/requirements-train.txt
+python ml/train_temporal_cnn.py \
+  --data "ml/data/*.jsonl" \
+  --output ml/models/gesture-temporal-cnn.npz \
+  --report ml/results/temporal-cnn-report.json
 ```
 
 Run real-time inference on the laptop or edge computer connected to the ring:
@@ -76,7 +84,8 @@ export RING_BRIDGE_TOKEN="same-token-as-the-API-server"
 
 python ml/realtime_infer.py \
   --name ring \
-  --model ml/models/gesture-mlp.npz \
+  --model ml/models/gesture-temporal-cnn.npz \
+  --robot-commands \
   --publish-url https://api.inudesu.xyz/v1/gesture
 ```
 
@@ -119,6 +128,9 @@ external position or velocity reference.
 Full training and collection instructions are in [`ml/README.md`](ml/README.md).
 The completed one-million-row simulation and six-axis drift benchmark are
 summarized in [`ml/results/RESULTS.md`](ml/results/RESULTS.md).
+The current literature review, episodic one-million-row experiment, real-idle
+check, and mechanical-dog command architecture are documented in
+[`ml/research/MAINSTREAM_GESTURE_RECOGNITION.md`](ml/research/MAINSTREAM_GESTURE_RECOGNITION.md).
 
 ## Live gesture API
 

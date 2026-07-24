@@ -57,6 +57,20 @@ const gestureNames = {
   uncertain: '不确定',
 };
 
+const robotCommandNames = {
+  turn_left: '左转',
+  turn_right: '右转',
+  stand: '站立',
+  sit: '坐下',
+  move_forward: '前进',
+  move_backward: '后退',
+  speed_up: '加速',
+  slow_down: '减速',
+  spin: '旋转',
+  greet: '互动',
+  stop: '停止',
+};
+
 const axisColors = ['#ff9b50', '#67e8a5', '#67b7ff'];
 const identityQuaternion = [1, 0, 0, 0];
 const state = {
@@ -169,6 +183,11 @@ function readableGesture(value) {
   return gestureNames[key] || key.replaceAll('_', ' ');
 }
 
+function readableRobotCommand(value) {
+  const key = String(value || '');
+  return robotCommandNames[key] || key.replaceAll('_', ' ');
+}
+
 function formatSigned(value, digits) {
   const normalized = Math.abs(value) < 0.5 * 10 ** -digits ? 0 : value;
   return `${normalized >= 0 ? '+' : ''}${normalized.toFixed(digits)}`;
@@ -242,7 +261,9 @@ function renderEventLog() {
       second: '2-digit',
     });
     const gesture = document.createElement('strong');
-    gesture.textContent = readableGesture(event.gesture);
+    gesture.textContent = event.command
+      ? `${readableGesture(event.gesture)} → ${readableRobotCommand(event.command)}`
+      : readableGesture(event.gesture);
     const confidence = document.createElement('span');
     confidence.textContent = `${Math.round(event.confidence * 100)}%`;
     item.append(time, gesture, confidence);
@@ -263,9 +284,13 @@ function renderGesture(event) {
     'zupt-circle': '3D 轨迹圆形',
     'zupt-stationary': 'ZUPT 静止状态',
   }[event.recognition_source] || 'MLP';
-  elements.gestureDetail.textContent = event.gesture === event.raw_gesture
+  const recognitionDetail = event.gesture === event.raw_gesture
     ? `${recognitionSource} / 识别通过`
     : `候选：${readableGesture(event.raw_gesture)} / 低于阈值`;
+  const robotCommand = event.robot_command;
+  elements.gestureDetail.textContent = robotCommand?.emitted
+    ? `${recognitionDetail} · 机械狗命令：${readableRobotCommand(robotCommand.command)}`
+    : recognitionDetail;
   elements.confidence.textContent = String(Math.round(confidence * 100));
   elements.confidenceBar.style.width = `${confidence * 100}%`;
   elements.modelType.textContent = event.model_type || 'unknown';
@@ -274,6 +299,7 @@ function renderGesture(event) {
   state.events.unshift({
     gesture: event.gesture,
     confidence,
+    command: robotCommand?.emitted ? robotCommand.command : null,
     at,
   });
   state.events = state.events.slice(0, 12);
