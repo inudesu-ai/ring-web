@@ -54,6 +54,7 @@ test('authenticated gesture events are broadcast and retained', async (context) 
       confidence: 0.93,
       probabilities: { wave: 0.93, idle: 0.07 },
       model_type: 'ring-mlp-v1',
+      recognition_source: 'mlp',
     }),
   });
   assert.equal(accepted.status, 202);
@@ -62,6 +63,7 @@ test('authenticated gesture events are broadcast and retained', async (context) 
   assert.equal(event.type, 'gesture');
   assert.equal(event.gesture, 'wave');
   assert.equal(event.confidence, 0.93);
+  assert.equal(event.recognition_source, 'mlp');
 
   const latestResponse = await fetch(`${baseUrl}/v1/gesture/latest`);
   const latest = await latestResponse.json();
@@ -82,7 +84,30 @@ test('authenticated gesture events are broadcast and retained', async (context) 
       gyro_dps: { x: 1.2, y: -0.8, z: 2.4 },
       linear_accel_g: { x: 0.01, y: -0.02, z: 0.01 },
       gyro_bias_dps: { x: 0.1, y: -0.1, z: 0.2 },
+      gyro_raw_dps: { x: 1.3, y: -0.9, z: 2.6 },
       stationary: false,
+      stationary_confidence: 0.42,
+      calibrated: true,
+      motion: {
+        armed: true,
+        moving: true,
+        rotating_only: false,
+        translation_candidate: false,
+        position_m: [0.02, -0.01, 0.03],
+        velocity_mps: [0.1, 0.0, 0.05],
+        linear_accel_world_g: [0.1, 0.0, 0.05],
+        corrected_accel_world_g: [0.08, 0.0, 0.04],
+        accel_bias_world_g: [0.002, -0.001, 0.003],
+        accel_threshold_g: 0.02,
+        noise_sigma_g: 0.003,
+        speed_mps: 0.112,
+        distance_m: 0.04,
+        segment_id: 2,
+        segment_elapsed_s: 0.3,
+        zupt_count: 1,
+        zupt_confidence: 0.42,
+        confidence: 0.93,
+      },
       sample_rate_hz: 100,
       sequence: 42,
       device_timestamp_ms: 1234,
@@ -95,6 +120,9 @@ test('authenticated gesture events are broadcast and retained', async (context) 
   assert.equal(telemetry.type, 'telemetry');
   assert.equal(telemetry.sample_rate_hz, 100);
   assert.equal(telemetry.sequence, 42);
+  assert.equal(telemetry.calibrated, true);
+  assert.equal(telemetry.motion.segment_id, 2);
+  assert.deepEqual(telemetry.motion.position_m, { x: 0.02, y: -0.01, z: 0.03 });
   assert.deepEqual(telemetry.euler_deg, { roll: 2.1, pitch: -3.2, yaw: 8.4 });
 
   const latestTelemetryResponse = await fetch(`${baseUrl}/v1/telemetry/latest`);

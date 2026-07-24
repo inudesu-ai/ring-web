@@ -355,7 +355,7 @@ h1 em {
 }
 
 .motion-panel {
-  min-height: 640px;
+  min-height: 710px;
   background:
     radial-gradient(circle at 50% 46%, rgba(200, 255, 61, 0.055), transparent 38%),
     var(--panel-strong);
@@ -518,6 +518,43 @@ h1 em {
   height: 100%;
   background: var(--acid);
   transition: width 80ms linear;
+}
+
+.motion-metrics {
+  display: grid;
+  grid-template-columns: 2fr repeat(3, 1fr);
+  gap: 1px;
+  margin: 10px 16px 0;
+  background: var(--line);
+}
+
+.motion-metrics > div {
+  display: grid;
+  gap: 7px;
+  min-width: 0;
+  padding: 12px 14px;
+  background: #0d100e;
+}
+
+.motion-metrics span {
+  color: var(--faint);
+  font-size: 7px;
+  letter-spacing: 0.1em;
+}
+
+.motion-metrics strong {
+  overflow: hidden;
+  color: var(--text);
+  font-family: ui-sans-serif, system-ui, sans-serif;
+  font-size: 11px;
+  font-weight: 480;
+  font-variant-numeric: tabular-nums;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.motion-metrics > div:first-child strong {
+  color: var(--acid);
 }
 
 .motion-disclaimer {
@@ -898,6 +935,10 @@ footer a:focus-visible {
 
   .pose-strip > div {
     min-height: 55px;
+  }
+
+  .motion-metrics {
+    grid-template-columns: 1fr 1fr;
   }
 
   .motion-panel {

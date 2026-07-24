@@ -79,6 +79,20 @@ near the ring because that machine owns the BLE connection. The telemetry URL
 is derived automatically as `https://api.inudesu.xyz/v1/telemetry`; use
 `--telemetry-hz` to change its default 10 Hz publish rate.
 
+The live path also runs `DisplacementTracker` at the sensor rate. It performs
+gravity removal, stationary bias/noise learning, adaptive acceleration
+deadband, trapezoidal double integration, rotation-only rejection and ZUPT.
+`DirectionalGestureRecognizer` fuses the resulting dominant trajectory axis
+with the model probabilities for `left/right/up/down`. The event field
+`recognition_source` is `zupt-direction` when this physical override is used
+and `mlp` otherwise.
+
+The simulated million-row model is still only a baseline for non-directional
+gestures. Its periodic random-phase directional templates make opposite
+directions intrinsically ambiguous in some windows; the trajectory fusion
+removes that ambiguity online, while real labeled ring sessions remain the
+correct way to retrain the MLP.
+
 ## Synthetic smoke test
 
 ```bash

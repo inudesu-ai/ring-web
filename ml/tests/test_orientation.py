@@ -49,6 +49,25 @@ class LiveOrientationTests(unittest.TestCase):
         roll, pitch, _yaw = quaternion_to_euler_deg(estimator.quaternion)
         self.assertLess(np.hypot(roll, pitch), 1.0)
 
+    def test_large_stable_hardware_bias_is_zeroed_at_startup(self) -> None:
+        estimator = SixAxisAhrs()
+        hardware_bias = np.asarray([1.5, -24.6, 2.0])
+        for _ in range(100):
+            estimator.update(
+                np.asarray([1.0, 0.0, 0.0]),
+                hardware_bias,
+                0.01,
+            )
+        self.assertTrue(estimator.calibrated)
+        self.assertTrue(estimator.stationary)
+        self.assertGreater(estimator.stationary_confidence, 0.9)
+        self.assertLess(np.linalg.norm(estimator.corrected_gyro_dps), 1e-6)
+        np.testing.assert_allclose(
+            estimator.gyro_bias_dps,
+            hardware_bias,
+            atol=1e-6,
+        )
+
 
 if __name__ == "__main__":
     unittest.main()

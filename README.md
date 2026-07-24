@@ -84,6 +84,28 @@ python ml/realtime_infer.py \
 The bridge now also publishes 10 Hz quaternion, Euler-angle, acceleration,
 gyroscope, and short-term relative-motion telemetry to `/v1/telemetry`.
 
+### ZUPT 3-D trajectory and directional fusion
+
+The live bridge performs displacement calculation at the full IMU sample rate
+instead of integrating in the browser:
+
+1. estimate a body-to-world quaternion and runtime gyro bias;
+2. rotate acceleration into the startup world frame and remove gravity;
+3. learn stationary acceleration bias/noise and apply an adaptive deadband;
+4. use trapezoidal integration for velocity and position;
+5. reject rotation-only lever-arm acceleration;
+6. force velocity to zero at confirmed rest (ZUPT).
+
+`telemetry.motion` contains position, velocity, path length, segment state,
+adaptive threshold and ZUPT status. A trajectory-aided classifier uses the
+dominant displacement axis to correct ambiguous `left/right/up/down` MLP
+outputs. Up/down is gravity-referenced; horizontal heading remains relative
+because the ring is a six-axis device without a magnetometer.
+
+This trajectory is intended for short `rest → move → rest` gestures. General
+long-duration IMU-only position tracking remains unobservable without an
+external position or velocity reference.
+
 Full training and collection instructions are in [`ml/README.md`](ml/README.md).
 The completed one-million-row simulation and six-axis drift benchmark are
 summarized in [`ml/results/RESULTS.md`](ml/results/RESULTS.md).

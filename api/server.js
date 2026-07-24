@@ -30,12 +30,63 @@ function cleanNumber(value, maximumAbsolute) {
 function normalizeVector(value, axes, maximumAbsolute) {
   if (!value || typeof value !== 'object') return null;
   const vector = {};
-  for (const axis of axes) {
-    const number = cleanNumber(value[axis], maximumAbsolute);
+  for (const [index, axis] of axes.entries()) {
+    const number = cleanNumber(
+      Array.isArray(value) ? value[index] : value[axis],
+      maximumAbsolute,
+    );
     if (number === null) return null;
     vector[axis] = number;
   }
   return vector;
+}
+
+function normalizeMotion(value) {
+  if (!value || typeof value !== 'object') return null;
+  const position = normalizeVector(value.position_m, ['x', 'y', 'z'], 1000);
+  const velocity = normalizeVector(value.velocity_mps, ['x', 'y', 'z'], 100);
+  const linearAccel = normalizeVector(
+    value.linear_accel_world_g,
+    ['x', 'y', 'z'],
+    64,
+  );
+  const correctedAccel = normalizeVector(
+    value.corrected_accel_world_g,
+    ['x', 'y', 'z'],
+    64,
+  );
+  const accelBias = normalizeVector(
+    value.accel_bias_world_g,
+    ['x', 'y', 'z'],
+    4,
+  );
+  if (!position || !velocity || !linearAccel || !correctedAccel || !accelBias) {
+    return null;
+  }
+  const numeric = (key, maximum, fallback = 0) => {
+    const parsed = cleanNumber(value[key], maximum);
+    return parsed === null ? fallback : parsed;
+  };
+  return {
+    armed: value.armed === true,
+    moving: value.moving === true,
+    rotating_only: value.rotating_only === true,
+    translation_candidate: value.translation_candidate === true,
+    position_m: position,
+    velocity_mps: velocity,
+    linear_accel_world_g: linearAccel,
+    corrected_accel_world_g: correctedAccel,
+    accel_bias_world_g: accelBias,
+    accel_threshold_g: numeric('accel_threshold_g', 64),
+    noise_sigma_g: numeric('noise_sigma_g', 64),
+    speed_mps: Math.max(0, numeric('speed_mps', 100)),
+    distance_m: Math.max(0, numeric('distance_m', 10000)),
+    segment_id: Math.max(0, Math.trunc(numeric('segment_id', 1_000_000))),
+    segment_elapsed_s: Math.max(0, numeric('segment_elapsed_s', 3600)),
+    zupt_count: Math.max(0, Math.trunc(numeric('zupt_count', 1_000_000))),
+    zupt_confidence: Math.min(1, Math.max(0, numeric('zupt_confidence', 1))),
+    confidence: Math.min(1, Math.max(0, numeric('confidence', 1))),
+  };
 }
 
 function producerAuthorized(request, bridgeToken) {
@@ -75,6 +126,9 @@ function normalizeGesture(body) {
     probabilities,
     model_type: cleanText(body.model_type, 64) || 'unknown',
     model_file: cleanText(body.model_file, 128),
+    recognition_source: cleanText(body.recognition_source, 64) || 'mlp',
+    direction_displacement_m:
+      normalizeVector(body?.direction_displacement_m, ['x', 'y', 'z'], 1000),
     source: cleanText(body.source, 128) || 'ring-bridge',
     device_timestamp_ms: Number.isFinite(Number(body.device_timestamp_ms))
       ? Number(body.device_timestamp_ms)
@@ -124,7 +178,15 @@ function normalizeTelemetry(body) {
         y: 0,
         z: 0,
       },
+    gyro_raw_dps:
+      normalizeVector(body?.gyro_raw_dps, ['x', 'y', 'z'], 10000) ?? gyro,
     stationary: body?.stationary === true,
+    stationary_confidence: Math.min(
+      1,
+      Math.max(0, cleanNumber(body?.stationary_confidence, 1) ?? 0),
+    ),
+    calibrated: body?.calibrated === true,
+    motion: normalizeMotion(body?.motion),
     sample_rate_hz: sampleRate,
     sequence: Number.isFinite(Number(body?.sequence))
       ? Math.max(0, Math.trunc(Number(body.sequence)))

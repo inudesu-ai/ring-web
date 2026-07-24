@@ -21,6 +21,10 @@ const elements = {
   rollBar: document.querySelector('#roll-bar'),
   pitchBar: document.querySelector('#pitch-bar'),
   yawBar: document.querySelector('#yaw-bar'),
+  position: document.querySelector('#position-value'),
+  speed: document.querySelector('#speed-value'),
+  distance: document.querySelector('#distance-value'),
+  zupt: document.querySelector('#zupt-value'),
   accel: ['x', 'y', 'z'].map((axis) => document.querySelector(`#accel-${axis}`)),
   gyro: ['x', 'y', 'z'].map((axis) => document.querySelector(`#gyro-${axis}`)),
   signalWindow: document.querySelector('#signal-window'),
@@ -64,9 +68,16 @@ const state = {
   acceleration: [0, 0, 1],
   gyro: [0, 0, 0],
   linearAcceleration: [0, 0, 0],
+  motionAbsolutePosition: [0, 0, 0],
+  motionOrigin: [0, 0, 0],
   motionPosition: [0, 0, 0],
   motionVelocity: [0, 0, 0],
   motionTrail: [],
+  motionDistance: 0,
+  motionZuptCount: 0,
+  motionZuptConfidence: 0,
+  motionArmed: false,
+  motionBackend: false,
   lastMotionAt: null,
   history: [],
   sampleRate: 0,
@@ -243,10 +254,12 @@ function renderGesture(event) {
   state.lastGestureAt = at;
 
   elements.gesture.textContent = readableGesture(event.gesture);
-  elements.gestureDetail.textContent =
-    event.gesture === event.raw_gesture
-      ? `${event.source || 'ring-bridge'} / 识别通过`
-      : `候选：${readableGesture(event.raw_gesture)} / 低于阈值`;
+  const recognitionSource = event.recognition_source === 'zupt-direction'
+    ? 'ZUPT 轨迹方向'
+    : 'MLP';
+  elements.gestureDetail.textContent = event.gesture === event.raw_gesture
+    ? `${recognitionSource} / 识别通过`
+    : `候选：${readableGesture(event.raw_gesture)} / 低于阈值`;
   elements.confidence.textContent = String(Math.round(confidence * 100));
   elements.confidenceBar.style.width = `${confidence * 100}%`;
   elements.modelType.textContent = event.model_type || 'unknown';
@@ -296,7 +309,45 @@ function renderTelemetry(event) {
   state.sampleRate = number(event.sample_rate_hz);
   state.stationary = event.stationary === true;
 
-  integrateRelativeMotion(state.linearAcceleration, state.stationary, at);
+  const motion = event.motion;
+  if (motion && typeof motion === 'object') {
+    state.motionBackend = true;
+    state.motionAbsolutePosition = vector(motion.position_m, ['x', 'y', 'z']);
+    state.motionPosition = state.motionAbsolutePosition.map(
+      (value, index) => value - state.motionOrigin[index],
+    );
+    state.motionVelocity = vector(motion.velocity_mps, ['x', 'y', 'z']);
+    state.motionDistance = number(motion.distance_m);
+    state.motionZuptCount = Math.max(0, Math.trunc(number(motion.zupt_count)));
+    state.motionZuptConfidence = clamp(number(motion.zupt_confidence), 0, 1);
+    state.motionArmed = motion.armed === true;
+    const previous = state.motionTrail.at(-1);
+    if (!previous || Math.hypot(
+      ...state.motionPosition.map((value, index) => value - previous[index]),
+    ) > 0.00015) {
+      state.motionTrail.push([...state.motionPosition]);
+      state.motionTrail = state.motionTrail.slice(-220);
+    }
+
+    let motionLabel = 'IN MOTION';
+    if (event.calibrated !== true) motionLabel = 'CALIBRATING';
+    else if (!state.motionArmed) motionLabel = 'ARMING ZUPT';
+    else if (motion.moving === true) motionLabel = 'TRANSLATING';
+    else if (motion.rotating_only === true) motionLabel = 'ROTATION ONLY';
+    else if (motion.translation_candidate === true) motionLabel = 'CONFIRMING';
+    else if (state.stationary) motionLabel = 'ZUPT LOCKED';
+    else motionLabel = 'READY';
+    elements.motionState.textContent = motionLabel;
+    elements.motionState.classList.toggle(
+      'active',
+      motion.moving === true || motion.translation_candidate === true,
+    );
+  } else {
+    state.motionBackend = false;
+    integrateRelativeMotion(state.linearAcceleration, state.stationary, at);
+    elements.motionState.textContent = state.stationary ? 'STATIONARY' : 'IN MOTION';
+    elements.motionState.classList.toggle('active', !state.stationary);
+  }
   state.history.push({
     at,
     accel: [...state.acceleration],
@@ -305,8 +356,13 @@ function renderTelemetry(event) {
   state.history = state.history.slice(-240);
 
   elements.sampleRate.textContent = `${state.sampleRate.toFixed(0)} Hz`;
-  elements.motionState.textContent = state.stationary ? 'STATIONARY' : 'IN MOTION';
-  elements.motionState.classList.toggle('active', !state.stationary);
+  elements.position.textContent = ['X', 'Y', 'Z']
+    .map((axis, index) => `${axis} ${formatSigned(state.motionPosition[index] * 100, 1)}`)
+    .join(' · ');
+  elements.speed.textContent = `${Math.hypot(...state.motionVelocity).toFixed(3)} m/s`;
+  elements.distance.textContent = `${(state.motionDistance * 100).toFixed(1)} cm`;
+  elements.zupt.textContent =
+    `${state.motionZuptCount} / ${Math.round(state.motionZuptConfidence * 100)}%`;
   elements.sequence.textContent = Number.isFinite(Number(event.sequence))
     ? `SEQ ${Number(event.sequence)}`
     : 'SEQ —';
@@ -362,12 +418,24 @@ function project(point, width, height) {
   };
 }
 
+function trajectoryScale() {
+  const points = state.motionTrail.length
+    ? state.motionTrail
+    : [state.motionPosition];
+  const extent = Math.max(
+    0.035,
+    ...points.flatMap((point) => point.map((value) => Math.abs(value))),
+  );
+  return clamp(1.45 / extent, 5, 32);
+}
+
 function transformedPoint(local, quaternion) {
   const rotated = rotateVector(quaternion, local);
+  const scale = trajectoryScale();
   return [
-    rotated[0] + state.motionPosition[0] * 0.45,
-    rotated[1] + state.motionPosition[2] * 0.45,
-    rotated[2] + state.motionPosition[1] * 0.45,
+    rotated[0] + state.motionPosition[0] * scale,
+    rotated[1] + state.motionPosition[2] * scale,
+    rotated[2] + state.motionPosition[1] * scale,
   ];
 }
 
@@ -395,12 +463,13 @@ function drawGrid(context, width, height) {
 
 function drawMotionTrail(context, width, height) {
   if (state.motionTrail.length < 2) return;
+  const scale = trajectoryScale();
   context.save();
-  context.lineWidth = 1.2;
+  context.lineWidth = 1.5;
   context.beginPath();
   state.motionTrail.forEach((position, index) => {
     const projected = project(
-      [position[0] * 0.45, position[2] * 0.45, position[1] * 0.45],
+      [position[0] * scale, position[2] * scale, position[1] * scale],
       width,
       height,
     );
@@ -412,6 +481,22 @@ function drawMotionTrail(context, width, height) {
   gradient.addColorStop(1, 'rgba(200,255,61,.48)');
   context.strokeStyle = gradient;
   context.stroke();
+
+  const endpoint = project(
+    [
+      state.motionPosition[0] * scale,
+      state.motionPosition[2] * scale,
+      state.motionPosition[1] * scale,
+    ],
+    width,
+    height,
+  );
+  context.beginPath();
+  context.arc(endpoint.x, endpoint.y, 3.5, 0, Math.PI * 2);
+  context.fillStyle = '#c8ff3d';
+  context.shadowColor = '#c8ff3d';
+  context.shadowBlur = 10;
+  context.fill();
   context.restore();
 }
 
@@ -691,6 +776,16 @@ function demoTelemetry(elapsed) {
   ];
   const gravityBody = rotateVector(quaternionConjugate(quaternion), [0, 0, 1]);
   const accel = gravityBody.map((value, index) => value + linear[index]);
+  const position = [
+    0.065 * Math.sin(elapsed * 0.72),
+    0.040 * Math.sin(elapsed * 0.51 + 0.8),
+    0.050 * Math.sin(elapsed * 0.63 + 1.4),
+  ];
+  const velocity = [
+    0.065 * 0.72 * Math.cos(elapsed * 0.72),
+    0.040 * 0.51 * Math.cos(elapsed * 0.51 + 0.8),
+    0.050 * 0.63 * Math.cos(elapsed * 0.63 + 1.4),
+  ];
   renderTelemetry({
     type: 'telemetry',
     demo: true,
@@ -707,6 +802,25 @@ function demoTelemetry(elapsed) {
     sample_rate_hz: 100,
     sequence: Math.floor(elapsed * 100),
     stationary: false,
+    calibrated: true,
+    stationary_confidence: 0.1,
+    motion: {
+      armed: true,
+      moving: true,
+      rotating_only: false,
+      translation_candidate: false,
+      position_m: Object.fromEntries(
+        ['x', 'y', 'z'].map((axis, index) => [axis, position[index]]),
+      ),
+      velocity_mps: Object.fromEntries(
+        ['x', 'y', 'z'].map((axis, index) => [axis, velocity[index]]),
+      ),
+      distance_m: elapsed * 0.035,
+      segment_id: 1,
+      segment_elapsed_s: elapsed,
+      zupt_count: Math.floor(elapsed / 5),
+      zupt_confidence: 0.1,
+    },
     received_at: new Date().toISOString(),
     source: 'browser-demo',
   });
@@ -739,6 +853,8 @@ function startDemo() {
   state.demoGestureIndex = -1;
   state.history = [];
   state.motionTrail = [];
+  state.motionOrigin = [0, 0, 0];
+  state.motionAbsolutePosition = [0, 0, 0];
   state.lastMotionAt = null;
   elements.demoToggle.classList.add('active');
   elements.demoToggle.lastChild.textContent = ' 返回实时';
@@ -757,6 +873,8 @@ function stopDemo() {
   state.demoTimer = null;
   state.history = [];
   state.motionTrail = [];
+  state.motionOrigin = [0, 0, 0];
+  state.motionAbsolutePosition = [0, 0, 0];
   state.lastMotionAt = null;
   state.demoToggle.classList.remove('active');
   elements.demoToggle.lastChild.textContent = ' 模拟信号';
@@ -771,6 +889,7 @@ elements.demoToggle.addEventListener('click', () => {
 
 elements.zeroPose.addEventListener('click', () => {
   state.zeroQuaternion = quaternionConjugate(state.rawTargetQuaternion);
+  state.motionOrigin = [...state.motionAbsolutePosition];
   state.motionPosition = [0, 0, 0];
   state.motionVelocity = [0, 0, 0];
   state.motionTrail = [];

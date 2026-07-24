@@ -57,7 +57,7 @@
         <div class="console-actions">
           <button class="action-button" id="zero-pose" type="button">
             <span class="button-icon">◎</span>
-            姿态归零
+            姿态 / 轨迹归零
           </button>
           <button class="action-button" id="demo-toggle" type="button">
             <span class="button-icon">◌</span>
@@ -117,8 +117,28 @@
             </div>
           </div>
 
+          <div class="motion-metrics" aria-label="ZUPT 三维位移">
+            <div>
+              <span>POSITION / cm</span>
+              <strong id="position-value">X +0.0 · Y +0.0 · Z +0.0</strong>
+            </div>
+            <div>
+              <span>SPEED</span>
+              <strong id="speed-value">0.000 m/s</strong>
+            </div>
+            <div>
+              <span>PATH</span>
+              <strong id="distance-value">0.0 cm</strong>
+            </div>
+            <div>
+              <span>ZUPT</span>
+              <strong id="zupt-value">0 / 0%</strong>
+            </div>
+          </div>
+
           <p class="motion-disclaimer">
-            画面中的位移是带阻尼的短时相对运动，不代表绝对空间定位。
+            轨迹使用重力分离、梯形双积分、静止检测与 ZUPT；适用于短时
+            “静止—移动—静止”动作，不代表长时间绝对空间定位。
           </p>
         </article>
 

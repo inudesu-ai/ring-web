@@ -14,11 +14,15 @@ from .data import (
 )
 from .hmm import GaussianHMMClassifier
 from .mlp import MLPClassifier
+from .direction import DirectionalGestureRecognizer
+from .displacement import DisplacementTracker
 from .orientation import SixAxisAhrs
 
 __all__ = [
     "GaussianHMMClassifier",
     "MLPClassifier",
+    "DirectionalGestureRecognizer",
+    "DisplacementTracker",
     "SixAxisAhrs",
     "Session",
     "WindowDataset",

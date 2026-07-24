@@ -87,3 +87,9 @@ this repository should be interpreted as absolute heading. Position is even
 less observable: ZUPT constrains drift when rest intervals exist, but external
 position/velocity observations are required for general long-duration
 tracking.
+
+The live short-horizon implementation also follows these open references:
+
+- [RIDI: Robust IMU Double Integration](https://arxiv.org/abs/1712.09004)
+- [Gait Tracking With x-IMU (ZUPT reference implementation)](https://github.com/xioTechnologies/Gait-Tracking-With-x-IMU)
+- [OpenShoe open-source ZUPT-aided INS](https://www.openshoe.org/)

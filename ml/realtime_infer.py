@@ -25,6 +25,12 @@ sys.path.insert(0, str(PROJECT_DIR / "sdk"))
 import ring_sound as sdk  # noqa: E402
 
 from ringml.data import resample_window  # noqa: E402
+from ringml.direction import (  # noqa: E402
+    DirectionDecision,
+    DirectionalGestureRecognizer,
+    blend_direction_probabilities,
+)
+from ringml.displacement import DisplacementTracker  # noqa: E402
 from ringml.model import load_model  # noqa: E402
 from ringml.orientation import SixAxisAhrs  # noqa: E402
 
@@ -79,6 +85,11 @@ def build_parser() -> argparse.ArgumentParser:
         type=int,
         default=0,
         help="Stop after N predictions; zero keeps running.",
+    )
+    parser.add_argument(
+        "--quiet",
+        action="store_true",
+        help="Publish predictions without printing every JSON event.",
     )
     return parser
 
@@ -228,6 +239,10 @@ async def run(args: argparse.Namespace) -> None:
     source = socket.gethostname()
     last_timestamp_ms: int | None = None
     last_telemetry_at = 0.0
+    expected_sequence: int | None = None
+    displacement: DisplacementTracker | None = None
+    direction = DirectionalGestureRecognizer()
+    direction_decision: DirectionDecision | None = None
 
     print(
         f"Loaded {model.model_type}: {', '.join(model.classes.tolist())}; "
@@ -242,6 +257,9 @@ async def run(args: argparse.Namespace) -> None:
         ) as ring:
             start_info = await start_sensor_stream(ring)
             report_started = True
+            displacement = DisplacementTracker(
+                sample_rate_hz=start_info.sample_rate_hz
+            )
             source_window_size = max(
                 2, round(model.window_seconds * start_info.sample_rate_hz)
             )
@@ -262,7 +280,26 @@ async def run(args: argparse.Namespace) -> None:
                     batch = await sdk.wait_sensor_data(ring, timeout_s=5.0)
                 except sdk.TimeoutError:
                     continue
-                for sample_index, sample in enumerate(batch.samples):
+                if (
+                    expected_sequence is not None
+                    and batch.sequence_start != expected_sequence
+                ):
+                    displacement.handle_transport_gap()
+                    direction.reset()
+                    raw_window.clear()
+                    samples_since_prediction = 0
+                    last_timestamp_ms = None
+                expected_sequence = batch.sequence_start + len(batch.samples)
+
+                # Firmware V2.000.0001.0015 appends one overlapping/corrupted
+                # tail item per batch. Keep its sequence accounted for, but do
+                # not feed it to fusion, integration, or recognition.
+                valid_samples = (
+                    batch.samples[:-1]
+                    if len(batch.samples) > 1
+                    else batch.samples
+                )
+                for sample_index, sample in enumerate(valid_samples):
                     accel_g = np.asarray(
                         [sample.accel_x, sample.accel_y, sample.accel_z],
                         dtype=np.float64,
@@ -284,7 +321,23 @@ async def run(args: argparse.Namespace) -> None:
                             else default_dt
                         )
                     last_timestamp_ms = sample.timestamp_ms
-                    ahrs.update(accel_g, gyro_dps, dt)
+                    quaternion = ahrs.update(accel_g, gyro_dps, dt)
+                    motion = displacement.update(
+                        dt_s=dt,
+                        accel_body_g=tuple(float(value) for value in accel_g),
+                        gyro_body_dps=tuple(
+                            float(value) for value in ahrs.corrected_gyro_dps
+                        ),
+                        quaternion=tuple(
+                            float(value) for value in quaternion
+                        ),
+                        stationary=ahrs.stationary,
+                        stationary_confidence=ahrs.stationary_confidence,
+                    )
+                    direction_decision = direction.update(
+                        motion,
+                        timestamp_ms=sample.timestamp_ms,
+                    )
 
                     now = time.monotonic()
                     if (
@@ -293,6 +346,13 @@ async def run(args: argparse.Namespace) -> None:
                         >= 1.0 / args.telemetry_hz
                     ):
                         telemetry = ahrs.telemetry(accel_g, gyro_dps)
+                        telemetry["linear_accel_g"] = {
+                            axis: float(value)
+                            for axis, value in zip(
+                                "xyz", motion.linear_accel_world_g
+                            )
+                        }
+                        telemetry["motion"] = motion.as_payload()
                         telemetry.update(
                             {
                                 "sample_rate_hz": start_info.sample_rate_hz,
@@ -306,12 +366,21 @@ async def run(args: argparse.Namespace) -> None:
 
                     raw_window.append(
                         [
-                            sample.accel_x / 32768.0,
-                            sample.accel_y / 32768.0,
-                            sample.accel_z / 32768.0,
-                            sample.gyro_x / 32768.0,
-                            sample.gyro_y / 32768.0,
-                            sample.gyro_z / 32768.0,
+                            float(accel_g[0] / start_info.accel_range_g),
+                            float(accel_g[1] / start_info.accel_range_g),
+                            float(accel_g[2] / start_info.accel_range_g),
+                            float(
+                                ahrs.corrected_gyro_dps[0]
+                                / start_info.gyro_range_dps
+                            ),
+                            float(
+                                ahrs.corrected_gyro_dps[1]
+                                / start_info.gyro_range_dps
+                            ),
+                            float(
+                                ahrs.corrected_gyro_dps[2]
+                                / start_info.gyro_range_dps
+                            ),
                         ]
                     )
                     samples_since_prediction += 1
@@ -332,8 +401,13 @@ async def run(args: argparse.Namespace) -> None:
                         else args.smoothing * probabilities
                         + (1.0 - args.smoothing) * smoothed
                     )
-                    best_index = int(np.argmax(smoothed))
-                    confidence = float(smoothed[best_index])
+                    fused, recognition_source = blend_direction_probabilities(
+                        model.classes,
+                        smoothed,
+                        direction_decision,
+                    )
+                    best_index = int(np.argmax(fused))
+                    confidence = float(fused[best_index])
                     raw_gesture = str(model.classes[best_index])
                     gesture = raw_gesture if confidence >= threshold else "uncertain"
                     payload = {
@@ -342,14 +416,28 @@ async def run(args: argparse.Namespace) -> None:
                         "confidence": confidence,
                         "probabilities": {
                             str(label): float(value)
-                            for label, value in zip(model.classes, smoothed)
+                            for label, value in zip(model.classes, fused)
                         },
-                        "model_type": model.model_type,
+                        "model_type": f"{model.model_type}+zupt-direction-v1",
                         "model_file": args.model.name,
+                        "recognition_source": recognition_source,
+                        "direction_displacement_m": (
+                            {
+                                axis: float(value)
+                                for axis, value in zip(
+                                    "xyz",
+                                    direction_decision.displacement_m,
+                                )
+                            }
+                            if recognition_source == "zupt-direction"
+                            and direction_decision is not None
+                            else None
+                        ),
                         "source": source,
                         "device_timestamp_ms": sample.timestamp_ms,
                     }
-                    print(json.dumps(payload, ensure_ascii=False), flush=True)
+                    if not args.quiet:
+                        print(json.dumps(payload, ensure_ascii=False), flush=True)
                     prediction_count += 1
 
                     if args.publish_url:
